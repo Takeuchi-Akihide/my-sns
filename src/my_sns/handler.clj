@@ -79,13 +79,16 @@
       (throw (ex-info (str "Target user not found: " target-user) {:type :not-found})))))
 
 (defn list-follows-handler [req]
-  (let [my-uuid "uuid"]
+  (let [my-uuid "uuid"
+        target-user (-> req :query-params :username)]
     (check-required-params my-uuid {})
 
-    (let [user-id my-uuid
-          follows (schema/list-follows user-id)]
-      {:status 200
-       :body {:message "Followers retrieved successfully" :data follows}})))
+    (if-let [user (schema/get-user-by-username target-user)]
+      (let [user-id (:users/id user)
+            follows (schema/list-follows user-id)]
+        {:status 200
+         :body {:message "Followers retrieved successfully" :data follows}})
+      (throw (ex-info (str "Target user not found: " target-user) {:type :not-found})))))
 
 (defn post-follow-handler [req]
   (let [my-uuid "uuid"
@@ -187,6 +190,12 @@
                         :post post-posts-handler}]
           ;; DELETE: /api/v1/posts/456
           ["/:post_id" {:delete delete-posts-handler}]]
+         ["/follows"
+          ;; GET: /api/v1/follows?username=user1
+          [""                 {:get list-follows-handler}]
+          ;; POST/DELETE: /api/v1/follows/user1
+          ["/:target_username" {:post post-follow-handler
+                                :delete delete-follow-handler}]]
          ["/timeline"      {:get list-timeline-handler}]])
        (ring/routes
         (ring/create-resource-handler {:path "/"})
