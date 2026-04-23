@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: mysns-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: dev
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: mysns_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  # app:
+  #   build: .
+  #   container_name: mysns-app
+  #   depends_on:
+  #     - db
+  #   environment:
+  #     DATABASE_URL: "jdbc:postgresql://db:5432/mysns_db?user=dev&password=password"
+  #   ports:
+  #     - "3000:3000"
+  #   volumes:
+  #     - .:/app
+  #     - ~/.m2:/root/.m2
+  #   working_dir: /app
+  #   command: lean run # Leiningenを使用
+
+volumes:
+  postgres_data:
