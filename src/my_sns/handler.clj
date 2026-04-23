@@ -89,7 +89,6 @@
         (throw (ex-info (str "Target user not found: " target-user) {:type :not-found})))
       (throw (ex-info "User not found" {:type :not-found})))))
 
-
 (defn list-follows-handler [req]
   (let [my-uuid (-> req :identity :user_id)
         target-user (-> req :query-params :username)]
@@ -196,6 +195,52 @@
          :body {:message "User deleted successfully" :data (:users/id user)}})
       (throw (ex-info "User not found" {:type :not-found})))))
 
+(defn post-like-handler [req]
+  (let [my-uuid (-> req :identity :user_id)
+        post-id (-> req :path-params :post_id)]
+    (check-required-params my-uuid {"post_id" post-id})
+
+    (if (schema/get-user-by-id (parse-uuid my-uuid))
+      (try
+        (let [post-uuid (parse-uuid post-id)]
+          (schema/like-post! (parse-uuid my-uuid) post-uuid)
+          {:status 200
+           :body {:message "Post liked successfully"}})
+        (catch IllegalArgumentException _
+          (throw (ex-info "Invalid Post ID format. Must be UUID." {:type :bad-request}))))
+      (throw (ex-info "User not found" {:type :not-found})))))
+
+(defn post-unlike-handler [req]
+  (let [my-uuid (-> req :identity :user_id)
+        post-id (-> req :path-params :post_id)]
+    (check-required-params my-uuid {"post_id" post-id})
+
+    (if (schema/get-user-by-id (parse-uuid my-uuid))
+      (try
+        (let [post-uuid (parse-uuid post-id)]
+          (schema/unlike-post! (parse-uuid my-uuid) post-uuid)
+          {:status 200
+           :body {:message "Post unliked successfully"}})
+        (catch IllegalArgumentException _
+          (throw (ex-info "Invalid Post ID format. Must be UUID." {:type :bad-request}))))
+      (throw (ex-info "User not found" {:type :not-found})))))
+
+(defn list-posts-replies-handler [req]
+  (let [my-uuid (-> req :identity :user_id)
+        post-id (-> req :path-params :post_id)
+        limit (Long/parseLong (or (-> req :query-params :limit) (str LIMIT)))]
+    (check-required-params my-uuid {"post_id" post-id})
+
+    (if (schema/get-user-by-id (parse-uuid my-uuid))
+      (try
+        (let [post-uuid (parse-uuid post-id)
+              replies (schema/list-post-replies post-uuid limit)]
+          {:status 200
+           :body {:message "Replies retrieved successfully" :data replies}})
+        (catch IllegalArgumentException _
+          (throw (ex-info "Invalid Post ID format. Must be UUID." {:type :bad-request}))))
+      (throw (ex-info "User not found" {:type :not-found})))))
+
 (def auth-backend (jws-backend {:secret auth/secret}))
 
 (def app
@@ -217,7 +262,10 @@
           [""          {:get list-posts-handler
                         :post post-posts-handler}]
           ;; DELETE: /api/v1/posts/456
-          ["/:post_id" {:delete delete-posts-handler}]]
+          ["/:post_id" {:get list-posts-replies-handler
+                        :delete delete-posts-handler}]
+          ["/:post_id/like" {:post post-like-handler
+                             :delete post-unlike-handler}]]
          ["/follows"
           ;; GET: /api/v1/follows?username=user1
           [""                 {:get list-follows-handler}]

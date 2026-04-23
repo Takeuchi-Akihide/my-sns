@@ -35,7 +35,16 @@
       PRIMARY KEY (follower_id, followed_id)
     );"
 
-   "CREATE INDEX IF NOT EXISTS idx_follows_followed_id ON follows(followed_id);"])
+   "CREATE INDEX IF NOT EXISTS idx_follows_followed_id ON follows(followed_id);"
+
+   "CREATE TABLE IF NOT EXISTS post_likes (
+      user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+      post_id UUID REFERENCES posts(id) ON DELETE CASCADE,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (user_id, post_id)
+    );"
+
+   "CREATE INDEX IF NOT EXISTS idx_post_likes_post_id ON post_likes(post_id);"])
 
 (defn add-user!
   [username display-name email password-hash]
@@ -128,13 +137,43 @@
 (defn list-timeline
   [user-id limit]
   (jdbc/execute! datasource
-                 ["SELECT p.id, p.content, p.created_at, u.username
+                 ["SELECT p.*,
+                          u.username,
+                          u.display_name,
+                          (SELECT COUNT (*) FROM post_likes WHERE post_id = p.id) as like_count,
+                          (SELECT COUNT (*) FROM posts WHERE parent_id = p.id) as reply_count,
+                          EXISTS (SELECT 1 FROM post_likes WHERE post_id = p.id AND user_id = ?) as is_liked
                    FROM posts p
                    JOIN users u ON p.user_id = u.id
-                   WHERE p.user_id IN (SELECT followed_id FROM follows WHERE follower_id = ?)
+                   WHERE p.parent_id IS NULL
+                     AND (p.user_id = ? OR p.user_id IN (SELECT followed_id FROM follows WHERE follower_id = ?))
                    ORDER BY p.created_at DESC
-                   LIMIT ?"
-                  user-id limit]))
+                   LIMIT ?;"
+                  user-id user-id user-id limit]))
+
+(defn like-post!
+  [user-id post-id]
+  (jdbc/execute! datasource
+                 ["INSERT INTO post_likes (user_id, post_id) VALUES (?, ?) ON CONFLICT DO NOTHING"
+                  user-id post-id]))
+
+(defn unlike-post!
+  [user-id post-id]
+  (jdbc/execute! datasource
+                 ["DELETE FROM post_likes WHERE user_id = ? AND post_id = ?"
+                  user-id post-id]))
+
+(defn list-post-replies
+  ;; 1つ下の階層の子投稿を取得する。これを使いまわすことでリプライ一覧が取得可能なはず。
+  [post-id limit]
+  (jdbc/execute! datasource
+                 ["SELECT p.id, p.content, p.created_at, u.username
+                    FROM posts p
+                    JOIN users u ON p.user_id = u.id
+                    WHERE p.parent_id = ?
+                    ORDER BY p.created_at ASC
+                    LIMIT ?"
+                  post-id limit]))
 
 (defn create-schema!
   []
@@ -144,7 +183,8 @@
 (defn drop-schema!
   "Drop tables (for development)"
   []
-  (doseq [stmt ["DROP TABLE IF EXISTS posts;"
+  (doseq [stmt ["DROP TABLE IF EXISTS post_likes;"
+                "DROP TABLE IF EXISTS posts;"
                 "DROP TABLE IF EXISTS follows;"
                 "DROP TABLE IF EXISTS users;"]]
     (jdbc/execute! datasource [stmt])))
