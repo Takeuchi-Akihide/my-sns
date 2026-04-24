@@ -10,7 +10,7 @@
   (case (first args)
     "server" (do
                (println "Starting my-sns server...")
-               (schema/create-schema!) ; Ensure schema exists
+               (schema/create-schema!)
                (run-jetty app {:port (Integer/parseInt (or (System/getenv "PORT") "3030"))
                                :join? true}))
     "recreate" (do
