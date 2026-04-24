@@ -1,5 +1,6 @@
 (ns my-sns.schema
   (:require [next.jdbc :as jdbc]
+            [next.jdbc.sql :as sql]
             [my-sns.db :refer [datasource]]))
 
 (def ddl-statements
@@ -60,12 +61,11 @@
 
 (defn get-user-by-id
   [user-id]
-  (let [uuid (if (string? user-id)
-               (java.util.UUID/fromString user-id)
-               user-id)]
-    (jdbc/execute-one! datasource
-                       ["SELECT * FROM users WHERE id = ?"
-                        uuid])))
+  (jdbc/execute-one! datasource
+                     ["SELECT id, username, display_name, bio, created_at, updated_at
+                       FROM users WHERE id = ?"
+                      user-id]))
+
 (defn get-user-id-by-post
   [post-id]
   (jdbc/execute-one! datasource
@@ -79,10 +79,11 @@
                   (str username-prefix "%") limit]))
 
 (defn update-user!
-  [user-id username display-name email password-hash bio]
-  (jdbc/execute! datasource
-                 ["UPDATE users SET username = ?, display_name = ?, email = ?, password_hash = ?, bio = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?"
-                  username display-name email password-hash bio user-id]))
+  [user-id updates-map]
+  (sql/update! datasource
+               :users
+               (assoc updates-map :updated_at (java.time.OffsetDateTime/now))
+               {:id user-id}))
 
 (defn delete-user!
   [user-id]
