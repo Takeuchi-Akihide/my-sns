@@ -266,6 +266,27 @@ curl "http://localhost:3030/api/v1/timeline?limit=20" \
 
 タイムラインには自分とフォロー中ユーザーの親投稿が含まれ、`like_count`、`reply_count`、`is_liked` を返します。
 
+ページネーションには `cursor_date` と `cursor_id` を使います。
+次ページを取得するには、前回のレスポンスに含まれる `meta.next_cursor_date` と `meta.next_cursor_id` を指定します。
+
+```bash
+curl "http://localhost:3030/api/v1/timeline?limit=20&cursor_date=<NEXT_CURSOR_DATE>&cursor_id=<NEXT_CURSOR_ID>" \
+  -H "Authorization: Token $TOKEN"
+```
+
+レスポンス例:
+
+```json
+{
+  "data": [ ... ],
+  "meta": {
+    "has_next": true,
+    "next_cursor_date": "2026-04-24T12:00:00.000Z",
+    "next_cursor_id": "..."
+  }
+}
+```
+
 ### 13. 投稿にいいねする
 
 ```bash

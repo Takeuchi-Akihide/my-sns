@@ -82,8 +82,8 @@
 
 (defn list-posts-handler [req]
   (let [my-uuid (-> req :identity :user_id)
-        target-user (-> req :query-params :username)
-        limit (Long/parseLong (or (-> req :query-params :limit) (str LIMIT)))]
+        target-user (-> req :params :username)
+        limit (Long/parseLong (or (-> req :params :limit) (str LIMIT)))]
     (check-required-params my-uuid {})
 
     (if (schema/get-user-by-id my-uuid)
@@ -97,7 +97,7 @@
 
 (defn list-follows-handler [req]
   (let [my-uuid (-> req :identity :user_id)
-        target-user (-> req :query-params :username)]
+        target-user (-> req :params :username)]
     (check-required-params my-uuid {})
 
     (if (schema/get-user-by-id my-uuid)
@@ -141,14 +141,21 @@
 
 (defn list-timeline-handler [req]
   (let [my-uuid (-> req :identity :user_id)
-        limit (Long/parseLong (or (-> req :query-params :limit) (str LIMIT)))]
+        params (:params req)
+        limit-str    (get params :limit (str LIMIT))
+        cursor-date  (:cursor_date params)
+        cursor-id    (:cursor_id params)
+        limit        (Long/parseLong limit-str)]
     (check-required-params my-uuid {})
 
     (if-let [user (schema/get-user-by-id my-uuid)]
       (let [user-id (:users/id user)
-            timeline (schema/list-timeline user-id limit)]
+            timeline (schema/list-timeline user-id limit cursor-date cursor-id)]
         {:status 200
-         :body {:message "Timeline retrieved successfully" :data timeline}})
+         :body {:data timeline
+                :meta {:has_next (= (count timeline) limit)
+                       :next_cursor_date (some-> timeline last :posts/created_at)
+                       :next_cursor_id   (some-> timeline last :posts/id)}}})
       (throw (ex-info "User account no longer exists. Please log in again." {:type :unauthorized})))))
 
 (defn post-user-handler [req]
@@ -245,7 +252,7 @@
 (defn list-posts-replies-handler [req]
   (let [my-uuid (-> req :identity :user_id)
         post-id (-> req :path-params :post_id)
-        limit (Long/parseLong (or (-> req :query-params :limit) (str LIMIT)))]
+        limit (Long/parseLong (or (-> req :params :limit) (str LIMIT)))]
     (check-required-params my-uuid {"post_id" post-id})
 
     (if (schema/get-user-by-id my-uuid)
