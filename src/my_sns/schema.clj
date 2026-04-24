@@ -45,7 +45,8 @@
       PRIMARY KEY (user_id, post_id)
     );"
 
-   "CREATE INDEX IF NOT EXISTS idx_post_likes_post_id ON post_likes(post_id);"])
+   "CREATE INDEX IF NOT EXISTS idx_post_likes_post_id ON post_likes(post_id);"
+   "CREATE INDEX IF NOT EXISTS idx_posts_timeline ON posts (parent_id, created_at DESC, id DESC);"])
 
 (defn add-user!
   [username display-name email password-hash]
@@ -136,21 +137,28 @@
                   user-id]))
 
 (defn list-timeline
-  [user-id limit]
-  (jdbc/execute! datasource
-                 ["SELECT p.*,
-                          u.username,
-                          u.display_name,
-                          (SELECT COUNT (*) FROM post_likes WHERE post_id = p.id) as like_count,
-                          (SELECT COUNT (*) FROM posts WHERE parent_id = p.id) as reply_count,
-                          EXISTS (SELECT 1 FROM post_likes WHERE post_id = p.id AND user_id = ?) as is_liked
-                   FROM posts p
-                   JOIN users u ON p.user_id = u.id
-                   WHERE p.parent_id IS NULL
-                     AND (p.user_id = ? OR p.user_id IN (SELECT followed_id FROM follows WHERE follower_id = ?))
-                   ORDER BY p.created_at DESC
-                   LIMIT ?;"
-                  user-id user-id user-id limit]))
+  [my-uuid limit cursor-date cursor-id]
+  (let [base-sql
+        "SELECT
+           p.id, p.content, p.created_at, p.user_id,
+           u.username, u.display_name, u.bio,
+           (SELECT COUNT(*) FROM post_likes WHERE post_id = p.id) as like_count,
+           (SELECT COUNT(*) FROM posts WHERE parent_id = p.id) as reply_count,
+           EXISTS (SELECT 1 FROM post_likes WHERE post_id = p.id AND user_id = ?) as is_liked
+         FROM posts p
+         JOIN users u ON p.user_id = u.id
+         WHERE p.parent_id IS NULL
+           AND (p.user_id = ? OR p.user_id IN (SELECT followed_id FROM follows WHERE follower_id = ?))"
+        [query-sql params]
+        (if (and cursor-date cursor-id)
+          [(str base-sql " AND (p.created_at, p.id) < (?::timestamptz, ?::uuid)
+                           ORDER BY p.created_at DESC, p.id DESC 
+                           LIMIT ?")
+           [my-uuid my-uuid my-uuid cursor-date cursor-id limit]]
+          [(str base-sql
+                " ORDER BY p.created_at DESC, p.id DESC LIMIT ?")
+           [my-uuid my-uuid my-uuid limit]])]
+    (jdbc/execute! datasource (into [query-sql] params))))
 
 (defn like-post!
   [user-id post-id]

@@ -285,7 +285,7 @@
       (testing "投稿にいいねできる"
         (schema/like-post! user-id (:posts/id post))
         ;; いいね数をカウントして確認
-        (let [timeline (schema/list-timeline user-id 10)]
+        (let [timeline (schema/list-timeline user-id 10 nil nil)]
           (is (some #(= 1 (:like_count %)) timeline)))))))
 
 (deftest test-unlike-post
@@ -303,7 +303,7 @@
         (schema/like-post! user-id (:posts/id post))
         (schema/unlike-post! user-id (:posts/id post))
         ;; いいね数が0になったことを確認
-        (let [timeline (schema/list-timeline user-id 10)]
+        (let [timeline (schema/list-timeline user-id 10 nil nil)]
           (is (some #(= 0 (:like_count %)) timeline)))))))
 
 ;; ==============================
@@ -335,8 +335,35 @@
         ;; user1がuser2をフォロー
         (schema/follow-user! user1-id user2-id)
         ;; user1のタイムラインには自分とフォロー中ユーザーの投稿が含まれる
-        (let [timeline (schema/list-timeline user1-id 10)]
+        (let [timeline (schema/list-timeline user1-id 10 nil nil)]
           (is (= 2 (count timeline))))))))
+
+(deftest test-list-timeline-with-cursor
+  (let [username1 "timeline-pointer-user1"
+        username2 "timeline-pointer-user2"
+        display-name1 "Timeline Pointer User 1"
+        display-name2 "Timeline Pointer User 2"
+        email1 "timelinepointer1@example.com"
+        email2 "timelinepointer2@example.com"
+        password-hash (hashers/derive "password")]
+
+    (schema/add-user! username1 display-name1 email1 password-hash)
+    (schema/add-user! username2 display-name2 email2 password-hash)
+
+    (let [user1 (schema/get-user-by-username username1)
+          user2 (schema/get-user-by-username username2)
+          user1-id (:users/id user1)
+          user2-id (:users/id user2)]
+      (schema/create-post! user1-id nil "First post")
+      (schema/create-post! user2-id nil "Second post")
+      (schema/follow-user! user1-id user2-id)
+      (let [page1 (schema/list-timeline user1-id 1 nil nil)
+            cursor-date (str (:posts/created_at (first page1)))
+            cursor-id (:posts/id (first page1))
+            page2 (schema/list-timeline user1-id 1 cursor-date cursor-id)]
+        (is (= 1 (count page1)))
+        (is (= 1 (count page2)))
+        (is (not= (:posts/id (first page1)) (:posts/id (first page2))))))))
 
 ;; ==============================
 ;; 検索関連のテスト
