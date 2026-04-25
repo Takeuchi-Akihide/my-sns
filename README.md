@@ -31,7 +31,7 @@
 
 ## DB の立ち上げ
 
-プロジェクトルートで PostgreSQL を起動します。
+プロジェクトルートで PostgreSQL を起動します。`mysns_db` と `mysns_test_db` の両方が作成されます。
 
 ```bash
 cd my-sns
@@ -44,15 +44,14 @@ docker compose up -d
 docker compose ps
 ```
 
-このプロジェクトの DB 設定は `docker-compose.yml` と `src/my_sns/db.clj` の内容に合わせて以下です。
+## psql で DB を確認する方法
+DB設定は以下です。
 
 - host: `localhost`
 - port: `5432`
-- database: `mysns_db`
+- database: `mysns_db` (開発用), `mysns_test_db` (テスト用)
 - user: `dev`
 - password: `password`
-
-## psql で DB を確認する方法
 
 ローカルの `psql` から接続する場合:
 
@@ -97,6 +96,11 @@ PORT=4040 lein run server
 ```
 
 DB 接続先を変更したい場合は `DATABASE_URL` を指定できます。
+
+## 利用可能なコマンド
+
+- `lein run server`: サーバー起動
+- `lein run recreate`: DB スキーマの再作成 (開発用)
 
 ```bash
 DATABASE_URL='jdbc:postgresql://localhost:5432/mysns_db?user=dev&password=password' lein run server
