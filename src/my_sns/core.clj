@@ -1,7 +1,8 @@
 (ns my-sns.core
   (:require [ring.adapter.jetty :refer [run-jetty]]
             [my-sns.handler :refer [app]]
-            [my-sns.schema :as schema])
+            [my-sns.schema :as schema]
+            [my-sns.worker :as worker])
   (:gen-class))
 
 (defn -main
@@ -11,6 +12,7 @@
     "server" (do
                (println "Starting my-sns server...")
                (schema/create-schema!)
+               (worker/start-worker)
                (run-jetty app {:port (Integer/parseInt (or (System/getenv "PORT") "3030"))
                                :join? true}))
     "recreate" (do

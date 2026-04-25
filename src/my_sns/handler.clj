@@ -1,5 +1,6 @@
 (ns my-sns.handler
   (:require [clojure.string :as str]
+            [clojure.core.async :as async]
             [reitit.ring :as ring]
             [ring.middleware.json :refer [wrap-json-response wrap-json-body]]
             [ring.middleware.cors :refer [wrap-cors]]
@@ -9,7 +10,8 @@
             [buddy.auth.backends.token :refer [jws-backend]]
             [buddy.auth.middleware :refer [wrap-authentication]]
             [my-sns.handler.auth :as auth]
-            [my-sns.schema :as schema]))
+            [my-sns.schema :as schema]
+            [my-sns.worker :as worker]))
 
 (def LIMIT 20)
 
@@ -70,8 +72,8 @@
 
     (try
       (let [post-uuid (parse-uuid post-id)
-            post (schema/get-user-id-by-post post-uuid)]
-        (if (= my-uuid (:posts/user_id post))
+            user-id (schema/get-user-id-by-post post-uuid)]
+        (if (= my-uuid user-id)
           (do
             (schema/delete-post! post-uuid)
             {:status 200
@@ -226,8 +228,13 @@
 
     (if (schema/get-user-by-id my-uuid)
       (try
-        (let [post-uuid (parse-uuid post-id)]
+        (let [post-uuid (parse-uuid post-id)
+              post-owner-id (schema/get-user-id-by-post post-uuid)]
           (schema/like-post! my-uuid post-uuid)
+          (async/put! worker/event-chan {:type :like
+                                         :user-id post-owner-id
+                                         :actor-id my-uuid
+                                         :post-id post-uuid})
           {:status 200
            :body {:message "Post liked successfully"}})
         (catch IllegalArgumentException _
@@ -241,8 +248,13 @@
 
     (if (schema/get-user-by-id my-uuid)
       (try
-        (let [post-uuid (parse-uuid post-id)]
+        (let [post-uuid (parse-uuid post-id)
+              post-owner-id (schema/get-user-id-by-post post-uuid)]
           (schema/unlike-post! my-uuid post-uuid)
+          (async/put! worker/event-chan {:type :unlike
+                                         :user-id post-owner-id
+                                         :actor-id my-uuid
+                                         :post-id post-uuid})
           {:status 200
            :body {:message "Post unliked successfully"}})
         (catch IllegalArgumentException _
