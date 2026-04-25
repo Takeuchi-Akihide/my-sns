@@ -8,11 +8,11 @@ services:
     environment:
       POSTGRES_USER: dev
       POSTGRES_PASSWORD: password
-      POSTGRES_DB: mysns_db
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
 
   # app:
   #   build: .
@@ -27,7 +27,7 @@ services:
   #     - .:/app
   #     - ~/.m2:/root/.m2
   #   working_dir: /app
-  #   command: lean run # Leiningenを使用
+  #   command: lein run # Leiningenを使用
 
 volumes:
   postgres_data:

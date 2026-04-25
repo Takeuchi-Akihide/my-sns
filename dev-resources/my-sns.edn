@@ -1,0 +1,1 @@
+{:db-url "jdbc:postgresql://localhost:5432/mysns_db?user=dev&password=password"}

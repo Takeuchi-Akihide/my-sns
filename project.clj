@@ -4,6 +4,7 @@
   :license {:name "EPL-2.0 OR GPL-2.0-or-later WITH Classpath-exception-2.0"
             :url "https://www.eclipse.org/legal/epl-2.0/"}
   :dependencies [[org.clojure/clojure "1.11.0"]
+                 [org.clojure/core.async "1.5.648"]
                  [com.github.seancorfield/next.jdbc "1.3.894"]
                  [org.postgresql/postgresql "42.7.3"]
                  [metosin/reitit "0.6.0"]
@@ -16,4 +17,6 @@
                  [clj-commons/clj-yaml "0.7.1"]
                  [buddy/buddy-hashers "2.0.167"]
                  [buddy/buddy-auth "3.0.1"]]
-  :main my-sns.core)
+  :main my-sns.core
+  :profiles {:dev {:resource-paths ["dev-resources"]}
+             :test {:resource-paths ["test-resources"]}})

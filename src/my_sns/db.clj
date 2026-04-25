@@ -1,11 +1,21 @@
 (ns my-sns.db
   (:require [next.jdbc :as jdbc]
-            [next.jdbc.result-set :as rs]))
+            [next.jdbc.result-set :as rs]
+            [aero.core :as aero])
+  (:import [java.io File]))
+
+(defn- load-config
+  []
+  (let [config-file (File. "my-sns.edn")]
+    (if (.exists config-file)
+      (aero/read-config config-file)
+      {:db-url "jdbc:postgresql://localhost:5432/mysns_db?user=dev&password=password"})))
 
 (defn- postgres-spec
   []
-  (let [db-url (or (System/getenv "DATABASE_URL")
-                   "jdbc:postgresql://localhost:5432/mysns_db?user=dev&password=password")]
+  (let [config (load-config)
+        db-url (or (System/getenv "DATABASE_URL")
+                   (:db-url config))]
     {:jdbcUrl db-url}))
 
 (def datasource (jdbc/get-datasource (postgres-spec)))

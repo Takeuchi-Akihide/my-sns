@@ -46,7 +46,18 @@
     );"
 
    "CREATE INDEX IF NOT EXISTS idx_post_likes_post_id ON post_likes(post_id);"
-   "CREATE INDEX IF NOT EXISTS idx_posts_timeline ON posts (parent_id, created_at DESC, id DESC);"])
+   "CREATE INDEX IF NOT EXISTS idx_posts_timeline ON posts (parent_id, created_at DESC, id DESC);"
+
+   "CREATE TABLE IF NOT EXISTS notifications (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      actor_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      post_id UUID REFERENCES posts(id) ON DELETE CASCADE,
+      type VARCHAR(50) NOT NULL,
+      is_read BOOLEAN DEFAULT FALSE,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+    );"
+   "CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id, created_at DESC);"])
 
 (defn add-user!
   [username display-name email password-hash]
@@ -69,9 +80,10 @@
 
 (defn get-user-id-by-post
   [post-id]
-  (jdbc/execute-one! datasource
+  (-> (jdbc/execute-one! datasource
                      ["SELECT user_id FROM posts WHERE id = ?"
-                      post-id]))
+                      post-id])
+      :posts/user_id))
 
 (defn search-users
   [username-prefix limit]
@@ -183,6 +195,18 @@
                     ORDER BY p.created_at ASC
                     LIMIT ?"
                   post-id limit]))
+
+(defn insert-notification!
+  [user-id actor-id post-id type]
+  (jdbc/execute! datasource
+                 ["INSERT INTO notifications (user_id, actor_id, post_id, type) VALUES (?, ?, ?, ?)"
+                  user-id actor-id post-id type]))
+
+(defn delete-notification!
+  [user-id actor-id post-id type]
+  (jdbc/execute! datasource
+                 ["DELETE FROM notifications WHERE user_id = ? AND actor_id = ? AND post_id = ? AND type = ?"
+                  user-id actor-id post-id type]))
 
 (defn create-schema!
   []
