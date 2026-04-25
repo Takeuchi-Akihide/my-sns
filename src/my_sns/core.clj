@@ -2,7 +2,8 @@
   (:require [ring.adapter.jetty :refer [run-jetty]]
             [my-sns.handler :refer [app]]
             [my-sns.schema :as schema]
-            [my-sns.worker :as worker])
+            [my-sns.worker :as worker]
+            [my-sns.sample :as sample])
   (:gen-class))
 
 (defn -main
@@ -19,4 +20,5 @@
                  (println "Dropping schema...")
                  (my-sns.schema/drop-schema!)
                  (my-sns.schema/create-schema!))
-    (println "Usage: lein run server|recreate")))
+    "load-sample" (sample/load-sample-data)
+    (println "Usage: lein run server|recreate|load-sample")))

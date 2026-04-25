@@ -101,6 +101,7 @@ DB 接続先を変更したい場合は `DATABASE_URL` を指定できます。
 
 - `lein run server`: サーバー起動
 - `lein run recreate`: DB スキーマの再作成 (開発用)
+- `lein run load-sample`: サンプルデータの投入 (開発用)
 
 ```bash
 DATABASE_URL='jdbc:postgresql://localhost:5432/mysns_db?user=dev&password=password' lein run server
