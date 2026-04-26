@@ -90,20 +90,4 @@
   ["frank" "bob"]
   ["frank" "david"]
   ["grace" "carol"]
-  ["grace" "emma"]]
-
- :likes
- [["alice" 1]
-  ["alice" 4]
-  ["bob" 0]
-  ["bob" 6]
-  ["carol" 2]
-  ["carol" 8]
-  ["david" 3]
-  ["david" 12]
-  ["emma" 5]
-  ["emma" 15]
-  ["frank" 7]
-  ["frank" 9]
-  ["grace" 10]
-  ["grace" 13]]}
+  ["grace" "emma"]]}
