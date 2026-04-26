@@ -14,6 +14,7 @@
                (println "Starting my-sns server...")
                (schema/create-schema!)
                (worker/start-worker)
+               (worker/start-sync-worker)
                (run-jetty app {:port (Integer/parseInt (or (System/getenv "PORT") "3030"))
                                :join? true}))
     "recreate" (do

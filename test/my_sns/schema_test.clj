@@ -286,7 +286,7 @@
         (schema/like-post! user-id (:posts/id post))
         ;; いいね数をカウントして確認
         (let [timeline (schema/list-timeline user-id 10 nil nil)]
-          (is (some #(= 1 (:posts/likes_count %)) timeline)))))))
+          (is (some #(= 1 (:likes_count %)) timeline)))))))
 
 (deftest test-unlike-post
   (let [username "unlikeuser"
@@ -304,7 +304,7 @@
         (schema/unlike-post! user-id (:posts/id post))
         ;; いいね数が0になったことを確認
         (let [timeline (schema/list-timeline user-id 10 nil nil)]
-          (is (some #(= 0 (:posts/likes_count %)) timeline)))))))
+          (is (some #(= 0 (:likes_count %)) timeline)))))))
 
 ;; ==============================
 ;; タイムラインのテスト
