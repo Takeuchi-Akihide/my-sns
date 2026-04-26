@@ -229,14 +229,14 @@
     (if (schema/get-user-by-id my-uuid)
       (try
         (let [post-uuid (parse-uuid post-id)
-              post-owner-id (schema/get-user-id-by-post post-uuid)]
-          (schema/like-post! my-uuid post-uuid)
+              post-owner-id (schema/get-user-id-by-post post-uuid)
+              ret (schema/like-post! my-uuid post-uuid)]
           (async/put! worker/event-chan {:type :like
                                          :user-id post-owner-id
                                          :actor-id my-uuid
                                          :post-id post-uuid})
           {:status 200
-           :body {:message "Post liked successfully"}})
+           :body {:message (:message ret)}})
         (catch IllegalArgumentException _
           (throw (ex-info "Invalid Post ID format. Must be UUID." {:type :bad-request}))))
       (throw (ex-info "User account no longer exists. Please log in again." {:type :unauthorized})))))
@@ -249,14 +249,14 @@
     (if (schema/get-user-by-id my-uuid)
       (try
         (let [post-uuid (parse-uuid post-id)
-              post-owner-id (schema/get-user-id-by-post post-uuid)]
-          (schema/unlike-post! my-uuid post-uuid)
+              post-owner-id (schema/get-user-id-by-post post-uuid)
+              ret (schema/unlike-post! my-uuid post-uuid)]
           (async/put! worker/event-chan {:type :unlike
                                          :user-id post-owner-id
                                          :actor-id my-uuid
                                          :post-id post-uuid})
           {:status 200
-           :body {:message "Post unliked successfully"}})
+           :body {:message (:message ret)}})
         (catch IllegalArgumentException _
           (throw (ex-info "Invalid Post ID format. Must be UUID." {:type :bad-request}))))
       (throw (ex-info "User account no longer exists. Please log in again." {:type :unauthorized})))))

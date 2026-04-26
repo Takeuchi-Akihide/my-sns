@@ -1,7 +1,8 @@
 (ns my-sns.schema
   (:require [next.jdbc :as jdbc]
             [next.jdbc.sql :as sql]
-            [my-sns.db :refer [datasource]]))
+            [my-sns.db :refer [datasource]]
+            [my-sns.redis :as redis]))
 
 (def ddl-statements
   [;; UUID生成関数のための拡張機能を有効化
@@ -85,8 +86,8 @@
 (defn get-user-id-by-post
   [post-id]
   (-> (jdbc/execute-one! datasource
-                     ["SELECT user_id FROM posts WHERE id = ?"
-                      post-id])
+                         ["SELECT user_id FROM posts WHERE id = ?"
+                          post-id])
       :posts/user_id))
 
 (defn search-users
@@ -164,7 +165,7 @@
   [my-uuid limit cursor-date cursor-id]
   (let [base-sql
         "SELECT
-           p.id, p.content, p.created_at, p.user_id, p.likes_count, p.replies_count,
+           p.id, p.content, p.created_at, p.user_id, p.replies_count,
            u.username, u.display_name, u.bio,
            EXISTS (SELECT 1 FROM post_likes WHERE post_id = p.id AND user_id = ?) as is_liked
          FROM posts p
@@ -179,28 +180,44 @@
            [my-uuid my-uuid my-uuid cursor-date cursor-id limit]]
           [(str base-sql
                 " ORDER BY p.created_at DESC, p.id DESC LIMIT ?")
-           [my-uuid my-uuid my-uuid limit]])]
-    (jdbc/execute! datasource (into [query-sql] params))))
+           [my-uuid my-uuid my-uuid limit]])
+        res (jdbc/execute! datasource (into [query-sql] params))]
+    (if (empty? res)
+      []
+      (let [post-ids (map :posts/id res)
+            likes-counts (redis/get-likes-batch post-ids)]
+        (map (fn [post count-str]
+               (assoc post :likes_count (if count-str (Long/parseLong count-str) 0)))
+             res likes-counts)))))
 
 (defn like-post!
   [user-id post-id]
-  (jdbc/with-transaction [tx datasource]
-    (jdbc/execute! tx
-                   ["INSERT INTO post_likes (user_id, post_id) VALUES (?, ?) ON CONFLICT DO NOTHING"
-                    user-id post-id])
-    (jdbc/execute! tx
-                   ["UPDATE posts SET likes_count = likes_count + 1 WHERE id = ?"
-                    post-id])))
+  (let [inserted? (jdbc/execute-one! datasource
+                                     ["INSERT INTO post_likes (user_id, post_id) 
+                                       VALUES (?, ?) ON CONFLICT DO NOTHING"
+                                      user-id post-id])]
+    (if (pos? (:next.jdbc/update-count inserted?))
+      (do (redis/incr-like-count post-id)
+          (redis/mark-dirty! post-id)
+          {:status 200 :message "Liked successfully"})
+      {:status 200 :message "Already liked"})))
 
 (defn unlike-post!
   [user-id post-id]
-  (jdbc/with-transaction [tx datasource]
-    (jdbc/execute! tx
-                   ["DELETE FROM post_likes WHERE user_id = ? AND post_id = ?"
-                    user-id post-id])
-    (jdbc/execute! tx
-                   ["UPDATE posts SET likes_count = GREATEST(likes_count - 1, 0) WHERE id = ?"
-                    post-id])))
+  (let [deleted-result (first (jdbc/execute! datasource
+                                            ["DELETE FROM post_likes WHERE user_id = ? AND post_id = ?"
+                                             user-id post-id]))]
+    (if (and deleted-result (pos? (:next.jdbc/update-count deleted-result)))
+      (do (redis/decr-like-count post-id)
+          (redis/mark-dirty! post-id)
+          {:status 200 :message "Unliked successfully"})
+      {:status 200 :message "Not liked"})))
+
+(defn sync-like-count!
+  [post-id current-count]
+  (jdbc/execute! datasource
+                 ["UPDATE posts SET likes_count = ? WHERE id = ?"
+                  current-count post-id]))
 
 (defn list-post-replies
   ;; 1つ下の階層の子投稿を取得する。これを使いまわすことでリプライ一覧が取得可能なはず。
