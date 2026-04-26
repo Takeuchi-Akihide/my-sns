@@ -51,21 +51,7 @@
                 (schema/follow-user! (:users/id follower-user) (:users/id followed-user))
                 (println (str "  " follower " follows " followed))))
             (catch Exception e
-              (println (str "  Error creating follow: " follower " -> " followed ": " (.getMessage e))))))
-
-        ;; Create likes
-        (println "Creating likes...")
-        ;; Use the created posts directly instead of querying
-        (let [all-posts @created-posts  ; 作成した投稿を使用
-              post-id-map (into {} (map-indexed (fn [idx post] [idx (:posts/id post)]) all-posts))]
-          (doseq [[liker post-idx] likes]
-            (try
-              (when-let [liker-user (schema/get-user-by-username liker)]
-                (when-let [post-id (get post-id-map post-idx)]
-                  (schema/like-post! (:users/id liker-user) post-id)
-                  (println (str "  " liker " liked post #" post-idx))))
-              (catch Exception e
-                (println (str "  Error creating like: " liker " -> post#" post-idx ": " (.getMessage e))))))))
+              (println (str "  Error creating follow: " follower " -> " followed ": " (.getMessage e)))))))
 
       (println "Sample data loaded successfully!"))
     (catch Exception e
