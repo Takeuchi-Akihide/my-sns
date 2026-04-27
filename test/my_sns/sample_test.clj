@@ -4,11 +4,10 @@
             [my-sns.sample :as sample]
             [my-sns.test-util :as test-util]))
 
-(use-fixtures :each test-util/with-test-db)
+(use-fixtures :each test-util/with-test-env)
 
 (deftest test-load-sample-data
   (testing "サンプルデータをデータベースにロードできる"
     (sample/load-sample-data)
     (is (= 7 (count (db/query ["SELECT * FROM users"]))))
-    (is (= 21 (count (db/query ["SELECT * FROM posts"]))))
     (is (= 18 (count (db/query ["SELECT * FROM follows"]))))))

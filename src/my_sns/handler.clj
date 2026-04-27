@@ -10,10 +10,16 @@
             [buddy.auth.backends.token :refer [jws-backend]]
             [buddy.auth.middleware :refer [wrap-authentication]]
             [my-sns.handler.auth :as auth]
+            [my-sns.redis :as redis]
             [my-sns.schema :as schema]
             [my-sns.worker :as worker]))
 
 (def LIMIT 20)
+
+(defn parse-uuid-param [value]
+  (or (parse-uuid value)
+      (throw (ex-info "Invalid id format. Must be UUID."
+                      {:type :bad-request}))))
 
 (defn wrap-global-exception-handling [handler]
   (fn [request]
@@ -26,6 +32,12 @@
           (cond
             (= err-type :bad-request)
             {:status 400 :body {:error "Bad Request" :details err-msg}}
+
+            (= err-type :unauthorized)
+            {:status 401 :body {:error "Unauthorized" :details err-msg}}
+
+            (= err-type :forbidden)
+            {:status 403 :body {:error "Forbidden" :details err-msg}}
 
             (= err-type :not-found)
             {:status 404 :body {:error "Not Found" :details err-msg}}
@@ -59,8 +71,17 @@
 
     (if (schema/get-user-by-id my-uuid)
       (let [user-id my-uuid
-            parent-id (parse-uuid (or parent-id ""))
+            parent-id (when parent-id
+                        (parse-uuid-param parent-id))
             res (schema/create-post! user-id parent-id content)]
+        (if parent-id
+          (async/put! worker/event-chan {:type :reply-created
+                                         :actor-id my-uuid
+                                         :post-id (:posts/id res)
+                                         :parent-id parent-id})
+          (async/put! worker/event-chan {:type :post-created
+                                         :author-id my-uuid
+                                         :post-id (:posts/id res)}))
         {:status 201
          :body {:message "Post created successfully" :data res}})
       (throw (ex-info "User not found:" {:type :not-found})))))
@@ -71,7 +92,7 @@
     (check-required-params my-uuid {"post_id" post-id})
 
     (try
-      (let [post-uuid (parse-uuid post-id)
+      (let [post-uuid (parse-uuid-param post-id)
             user-id (schema/get-user-id-by-post post-uuid)]
         (if (= my-uuid user-id)
           (do
@@ -116,10 +137,10 @@
         target-username (-> req :path-params :target_username)]
     (check-required-params my-uuid {})
 
-    (if-let [user (schema/get-user-by-id my-uuid)]
+    (if (schema/get-user-by-id my-uuid)
       (if-let [target-user (schema/get-user-by-username target-username)]
         (do
-          (schema/follow-user! (:users/id user) (:users/id target-user))
+          (schema/follow-user! my-uuid (:users/id target-user))
           {:status 201
            :body {:message "Followed successfully" :data target-username}})
         (throw (ex-info (str "Target user not found: " target-username) {:type :not-found})))
@@ -131,10 +152,10 @@
         target-username (-> req :path-params :target_username)]
     (check-required-params my-uuid {})
 
-    (if-let [user (schema/get-user-by-id my-uuid)]
+    (if (schema/get-user-by-id my-uuid)
       (if-let [target-user (schema/get-user-by-username target-username)]
         (do
-          (schema/unfollow-user! (:users/id user) (:users/id target-user))
+          (schema/unfollow-user! my-uuid (:users/id target-user))
           {:status 201
            :body {:message "Unfollowed successfully" :data target-username}})
         (throw (ex-info (str "Target user not found: " target-username) {:type :not-found})))
@@ -144,20 +165,24 @@
 (defn list-timeline-handler [req]
   (let [my-uuid (-> req :identity :user_id)
         params (:params req)
-        limit-str    (get params :limit (str LIMIT))
-        cursor-date  (:cursor_date params)
-        cursor-id    (:cursor_id params)
-        limit        (Long/parseLong limit-str)]
+        limit  (Long/parseLong (get params :limit (str LIMIT)))
+        offset (Long/parseLong (get params :offset "0"))
+        start offset
+        end (+ offset limit -1)]
     (check-required-params my-uuid {})
 
-    (if-let [user (schema/get-user-by-id my-uuid)]
-      (let [user-id (:users/id user)
-            timeline (schema/list-timeline user-id limit cursor-date cursor-id)]
-        {:status 200
-         :body {:data timeline
-                :meta {:has_next (= (count timeline) limit)
-                       :next_cursor_date (some-> timeline last :posts/created_at)
-                       :next_cursor_id   (some-> timeline last :posts/id)}}})
+    (if (schema/get-user-by-id my-uuid)
+      (let [post-ids (redis/get-timeline-ids my-uuid start end)]
+        (if (empty? post-ids)
+          {:status 200 :body {:data []}}
+          (let [posts (schema/get-posts-by-ids my-uuid post-ids)
+                post-ids-in-db (map :posts/id posts)
+                likes-counts (redis/get-likes-batch post-ids-in-db)
+                final-posts (map (fn [post cnt-str]
+                                   (assoc post :likes-count (if cnt-str (Long/parseLong cnt-str) 0)))
+                                 posts likes-counts)]
+            {:status 200
+             :body {:data final-posts}})))
       (throw (ex-info "User account no longer exists. Please log in again." {:type :unauthorized})))))
 
 (defn post-user-handler [req]
@@ -228,7 +253,7 @@
 
     (if (schema/get-user-by-id my-uuid)
       (try
-        (let [post-uuid (parse-uuid post-id)
+        (let [post-uuid (parse-uuid-param post-id)
               post-owner-id (schema/get-user-id-by-post post-uuid)
               ret (schema/like-post! my-uuid post-uuid)]
           (async/put! worker/event-chan {:type :like
@@ -248,7 +273,7 @@
 
     (if (schema/get-user-by-id my-uuid)
       (try
-        (let [post-uuid (parse-uuid post-id)
+        (let [post-uuid (parse-uuid-param post-id)
               post-owner-id (schema/get-user-id-by-post post-uuid)
               ret (schema/unlike-post! my-uuid post-uuid)]
           (async/put! worker/event-chan {:type :unlike
@@ -269,7 +294,7 @@
 
     (if (schema/get-user-by-id my-uuid)
       (try
-        (let [post-uuid (parse-uuid post-id)
+        (let [post-uuid (parse-uuid-param post-id)
               replies (schema/list-post-replies post-uuid limit)]
           {:status 200
            :body {:message "Replies retrieved successfully" :data replies}})
@@ -279,7 +304,7 @@
 
 (def auth-backend (jws-backend {:secret auth/secret}))
 
-(def app
+(def base-app
   (-> (ring/ring-handler
        (ring/router
         ["/api/v1"
@@ -312,12 +337,14 @@
          ["/timeline"      {:get list-timeline-handler}]])
        (ring/routes
         (ring/create-resource-handler {:path "/"})
-        (ring/create-default-handler {:not-found (constantly {:status 404 :body "Not found"})})))
+       (ring/create-default-handler {:not-found (constantly {:status 404 :body "Not found"})})))
       wrap-global-exception-handling
       (wrap-cors :access-control-allow-origin [#".*"]
                  :access-control-allow-methods [:get :post :put :delete]
                  :access-control-allow-headers ["Content-Type"])
-      wrap-json-response
       (wrap-json-body {:keywords? true})
       wrap-keyword-params
       wrap-params))
+
+(def app
+  (wrap-json-response base-app))

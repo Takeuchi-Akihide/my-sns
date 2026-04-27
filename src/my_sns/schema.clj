@@ -40,6 +40,7 @@
     );"
 
    "CREATE INDEX IF NOT EXISTS idx_follows_followed_id ON follows(followed_id);"
+   "CREATE INDEX IF NOT EXISTS idx_follows_follower_id ON follows(follower_id);"
 
    "CREATE TABLE IF NOT EXISTS post_likes (
       user_id UUID REFERENCES users(id) ON DELETE CASCADE,
@@ -129,6 +130,18 @@
         (jdbc/execute! tx ["UPDATE posts SET replies_count = GREATEST(replies_count - 1, 0) WHERE id = ?" (:posts/parent_id post)]))
       (jdbc/execute! tx ["DELETE FROM posts WHERE id = ?" post-id]))))
 
+(defn get-posts-by-ids [my-uuid post-ids]
+  (jdbc/execute! datasource
+                 ["SELECT p.id, p.content, p.created_at, p.user_id, p.replies_count, 
+                          u.username, u.display_name, u.bio,
+                          EXISTS (SELECT 1 FROM post_likes WHERE post_id = p.id AND user_id = ?) as is_liked
+                   FROM unnest(?::uuid[]) WITH ORDINALITY AS t(id, ord)
+                   JOIN posts p ON p.id = t.id
+                   JOIN users u ON p.user_id = u.id
+                   ORDER BY t.ord"
+                  my-uuid
+                  (into-array java.util.UUID post-ids)]))
+
 (defn follow-user!
   [follower-id followed-id]
   (jdbc/execute! datasource
@@ -161,34 +174,14 @@
                    WHERE f.follower_id = ?"
                   user-id]))
 
-(defn list-timeline
-  [my-uuid limit cursor-date cursor-id]
-  (let [base-sql
-        "SELECT
-           p.id, p.content, p.created_at, p.user_id, p.replies_count,
-           u.username, u.display_name, u.bio,
-           EXISTS (SELECT 1 FROM post_likes WHERE post_id = p.id AND user_id = ?) as is_liked
-         FROM posts p
-         JOIN users u ON p.user_id = u.id
-         WHERE p.parent_id IS NULL
-           AND (p.user_id = ? OR p.user_id IN (SELECT followed_id FROM follows WHERE follower_id = ?))"
-        [query-sql params]
-        (if (and cursor-date cursor-id)
-          [(str base-sql " AND (p.created_at, p.id) < (?::timestamptz, ?::uuid)
-                           ORDER BY p.created_at DESC, p.id DESC 
-                           LIMIT ?")
-           [my-uuid my-uuid my-uuid cursor-date cursor-id limit]]
-          [(str base-sql
-                " ORDER BY p.created_at DESC, p.id DESC LIMIT ?")
-           [my-uuid my-uuid my-uuid limit]])
-        res (jdbc/execute! datasource (into [query-sql] params))]
-    (if (empty? res)
-      []
-      (let [post-ids (map :posts/id res)
-            likes-counts (redis/get-likes-batch post-ids)]
-        (map (fn [post count-str]
-               (assoc post :likes_count (if count-str (Long/parseLong count-str) 0)))
-             res likes-counts)))))
+(defn list-followers
+  [user-id]
+  (jdbc/execute! datasource
+                 ["SELECT u.id, u.username
+                   FROM follows f
+                   JOIN users u ON f.follower_id = u.id
+                   WHERE f.followed_id = ?"
+                  user-id]))
 
 (defn like-post!
   [user-id post-id]
