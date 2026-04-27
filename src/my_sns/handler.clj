@@ -10,6 +10,7 @@
             [buddy.auth.backends.token :refer [jws-backend]]
             [buddy.auth.middleware :refer [wrap-authentication]]
             [my-sns.handler.auth :as auth]
+            [my-sns.redis :as redis]
             [my-sns.schema :as schema]
             [my-sns.worker :as worker]))
 
@@ -61,6 +62,14 @@
       (let [user-id my-uuid
             parent-id (parse-uuid (or parent-id ""))
             res (schema/create-post! user-id parent-id content)]
+        (if parent-id
+          (async/put! worker/event-chan {:type :reply-created
+                                         :actor-id my-uuid
+                                         :post-id (:posts/id res)
+                                         :parent-id parent-id})
+          (async/put! worker/event-chan {:type :post-created
+                                         :author-id my-uuid
+                                         :post-id (:posts/id res)}))
         {:status 201
          :body {:message "Post created successfully" :data res}})
       (throw (ex-info "User not found:" {:type :not-found})))))
@@ -116,10 +125,10 @@
         target-username (-> req :path-params :target_username)]
     (check-required-params my-uuid {})
 
-    (if-let [user (schema/get-user-by-id my-uuid)]
+    (if (schema/get-user-by-id my-uuid)
       (if-let [target-user (schema/get-user-by-username target-username)]
         (do
-          (schema/follow-user! (:users/id user) (:users/id target-user))
+          (schema/follow-user! my-uuid (:users/id target-user))
           {:status 201
            :body {:message "Followed successfully" :data target-username}})
         (throw (ex-info (str "Target user not found: " target-username) {:type :not-found})))
@@ -131,10 +140,10 @@
         target-username (-> req :path-params :target_username)]
     (check-required-params my-uuid {})
 
-    (if-let [user (schema/get-user-by-id my-uuid)]
+    (if (schema/get-user-by-id my-uuid)
       (if-let [target-user (schema/get-user-by-username target-username)]
         (do
-          (schema/unfollow-user! (:users/id user) (:users/id target-user))
+          (schema/unfollow-user! my-uuid (:users/id target-user))
           {:status 201
            :body {:message "Unfollowed successfully" :data target-username}})
         (throw (ex-info (str "Target user not found: " target-username) {:type :not-found})))
@@ -144,20 +153,24 @@
 (defn list-timeline-handler [req]
   (let [my-uuid (-> req :identity :user_id)
         params (:params req)
-        limit-str    (get params :limit (str LIMIT))
-        cursor-date  (:cursor_date params)
-        cursor-id    (:cursor_id params)
-        limit        (Long/parseLong limit-str)]
+        limit  (Long/parseLong (get params :limit (str LIMIT)))
+        offset (Long/parseLong (get params :offset "0"))
+        start offset
+        end (+ offset limit -1)]
     (check-required-params my-uuid {})
 
-    (if-let [user (schema/get-user-by-id my-uuid)]
-      (let [user-id (:users/id user)
-            timeline (schema/list-timeline user-id limit cursor-date cursor-id)]
-        {:status 200
-         :body {:data timeline
-                :meta {:has_next (= (count timeline) limit)
-                       :next_cursor_date (some-> timeline last :posts/created_at)
-                       :next_cursor_id   (some-> timeline last :posts/id)}}})
+    (if (schema/get-user-by-id my-uuid)
+      (let [post-ids (redis/get-timeline-ids my-uuid start end)]
+        (if (empty? post-ids)
+          {:status 200 :body {:data []}}
+          (let [posts (schema/get-posts-by-ids my-uuid post-ids)
+                post-ids-in-db (map :posts/id posts)
+                likes-counts (redis/get-likes-batch post-ids-in-db)
+                final-posts (map (fn [post cnt-str]
+                                   (assoc post :likes-count (if cnt-str (Long/parseLong cnt-str) 0)))
+                                 posts likes-counts)]
+            {:status 200
+             :body {:data final-posts}})))
       (throw (ex-info "User account no longer exists. Please log in again." {:type :unauthorized})))))
 
 (defn post-user-handler [req]

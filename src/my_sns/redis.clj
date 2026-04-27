@@ -6,7 +6,6 @@
 (defmacro wcar* [& body] `(car/wcar server1-conn ~@body))
 
 (defn incr-like-count [post-id]
-  (println "incr-like-count" (str "post:" post-id ":likes"))
   (let [key (str "post:" post-id ":likes")]
     (wcar* (car/incr key))))
 
@@ -24,3 +23,11 @@
 
 (defn pop-dirty-posts! []
   (wcar* (car/spop "dirty_posts" BATCH-SIZE)))
+
+(defn push-to-timeline! [user-id post-id]
+  (let [key (str "timeline:" user-id)]
+    (wcar* (car/lpush key post-id)
+           (car/ltrim key 0 999))))
+
+(defn get-timeline-ids [user-id start end]
+  (wcar* (car/lrange (str "timeline:" user-id) start end)))
