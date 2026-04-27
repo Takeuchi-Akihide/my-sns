@@ -6,7 +6,7 @@
             [my-sns.test-util :as test-util]))
 
 ;; fixtureの設定
-(use-fixtures :each test-util/with-test-db)
+(use-fixtures :each test-util/with-test-env)
 
 ;; ==============================
 ;; 認証関連のテスト

@@ -16,6 +16,11 @@
 
 (def LIMIT 20)
 
+(defn parse-uuid-param [value]
+  (or (parse-uuid value)
+      (throw (ex-info "Invalid id format. Must be UUID."
+                      {:type :bad-request}))))
+
 (defn wrap-global-exception-handling [handler]
   (fn [request]
     (try
@@ -27,6 +32,12 @@
           (cond
             (= err-type :bad-request)
             {:status 400 :body {:error "Bad Request" :details err-msg}}
+
+            (= err-type :unauthorized)
+            {:status 401 :body {:error "Unauthorized" :details err-msg}}
+
+            (= err-type :forbidden)
+            {:status 403 :body {:error "Forbidden" :details err-msg}}
 
             (= err-type :not-found)
             {:status 404 :body {:error "Not Found" :details err-msg}}
@@ -60,7 +71,8 @@
 
     (if (schema/get-user-by-id my-uuid)
       (let [user-id my-uuid
-            parent-id (parse-uuid (or parent-id ""))
+            parent-id (when parent-id
+                        (parse-uuid-param parent-id))
             res (schema/create-post! user-id parent-id content)]
         (if parent-id
           (async/put! worker/event-chan {:type :reply-created
@@ -80,7 +92,7 @@
     (check-required-params my-uuid {"post_id" post-id})
 
     (try
-      (let [post-uuid (parse-uuid post-id)
+      (let [post-uuid (parse-uuid-param post-id)
             user-id (schema/get-user-id-by-post post-uuid)]
         (if (= my-uuid user-id)
           (do
@@ -241,7 +253,7 @@
 
     (if (schema/get-user-by-id my-uuid)
       (try
-        (let [post-uuid (parse-uuid post-id)
+        (let [post-uuid (parse-uuid-param post-id)
               post-owner-id (schema/get-user-id-by-post post-uuid)
               ret (schema/like-post! my-uuid post-uuid)]
           (async/put! worker/event-chan {:type :like
@@ -261,7 +273,7 @@
 
     (if (schema/get-user-by-id my-uuid)
       (try
-        (let [post-uuid (parse-uuid post-id)
+        (let [post-uuid (parse-uuid-param post-id)
               post-owner-id (schema/get-user-id-by-post post-uuid)
               ret (schema/unlike-post! my-uuid post-uuid)]
           (async/put! worker/event-chan {:type :unlike
@@ -282,7 +294,7 @@
 
     (if (schema/get-user-by-id my-uuid)
       (try
-        (let [post-uuid (parse-uuid post-id)
+        (let [post-uuid (parse-uuid-param post-id)
               replies (schema/list-post-replies post-uuid limit)]
           {:status 200
            :body {:message "Replies retrieved successfully" :data replies}})
@@ -292,7 +304,7 @@
 
 (def auth-backend (jws-backend {:secret auth/secret}))
 
-(def app
+(def base-app
   (-> (ring/ring-handler
        (ring/router
         ["/api/v1"
@@ -325,12 +337,14 @@
          ["/timeline"      {:get list-timeline-handler}]])
        (ring/routes
         (ring/create-resource-handler {:path "/"})
-        (ring/create-default-handler {:not-found (constantly {:status 404 :body "Not found"})})))
+       (ring/create-default-handler {:not-found (constantly {:status 404 :body "Not found"})})))
       wrap-global-exception-handling
       (wrap-cors :access-control-allow-origin [#".*"]
                  :access-control-allow-methods [:get :post :put :delete]
                  :access-control-allow-headers ["Content-Type"])
-      wrap-json-response
       (wrap-json-body {:keywords? true})
       wrap-keyword-params
       wrap-params))
+
+(def app
+  (wrap-json-response base-app))

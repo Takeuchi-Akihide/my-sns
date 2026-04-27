@@ -12,9 +12,7 @@
     (schema/create-schema!)
     (let [sample-data (aero/read-config (io/resource "sample-data.edn"))
           users (:users sample-data)
-          posts (:posts sample-data)
-          follows (:follows sample-data)
-          created-posts (atom [])]  ; 作成した投稿を保持
+          follows (:follows sample-data)]
       ;; Create users
       (println "Creating users...")
       (doseq [user users]
@@ -24,21 +22,6 @@
             (println (str "  Created user: " (:username user))))
           (catch Exception e
             (println (str "  User already exists or error: " (:username user) " - " (.getMessage e))))))
-
-      ;; Create posts
-      (println "Creating posts...")
-      (let [user-posts (group-by :username posts)]
-        (doseq [[username user-posts] user-posts]
-          (when-let [user (schema/get-user-by-username username)]
-            (let [user-id (:users/id user)]
-              (doseq [post user-posts]
-                (try
-                  (let [created-post (schema/create-post! user-id nil (:content post))]
-                    (swap! created-posts conj created-post)
-                    (println (str "  Created post for " username ": "
-                                  (subs (:content post) 0 (min 30 (count (:content post)))) "...")))
-                  (catch Exception e
-                    (println (str "  Error creating post for " username ": " (.getMessage e))))))))))
 
       ;; Create follows
       (println "Creating follow relationships...")

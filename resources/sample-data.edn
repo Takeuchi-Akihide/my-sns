@@ -28,50 +28,6 @@
    :email "grace@example.com"
    :password "password123"}]
 
- :posts
- [{:username "alice"
-   :content "今日の天気が素晴らしいですね！散歩に出かけたら気持ちよかったです。"}
-  {:username "alice"
-   :content "新しい本を読み始めました。とても面白くて一気に読んでしまいました。"}
-  {:username "alice"
-   :content "週末に友達とカフェに行ってきました。素敵な時間を過ごせました。"}
-  {:username "bob"
-   :content "仕事で新しいプロジェクトを始めました。ワクワクしています！"}
-  {:username "bob"
-   :content "昨日はジムでワークアウトしました。汗をかくのは気持ちいいですね。"}
-  {:username "bob"
-   :content "おすすめのプログラミング言語を聞かれたので、Clojure を勧めました。"}
-  {:username "carol"
-   :content "今日はおいしいラーメンを食べました。スープが絶品でした！"}
-  {:username "carol"
-   :content "新しい趣味として水彩画を始めました。まだ下手ですが楽しいです。"}
-  {:username "carol"
-   :content "今週末は家族でピクニックに行く予定です。楽しみです。"}
-  {:username "david"
-   :content "久しぶりに映画を見に行きました。アクション映画で興奮しました。"}
-  {:username "david"
-   :content "新しいガジェットを買いました。使い勝手が良くて気に入っています。"}
-  {:username "david"
-   :content "週末は家でゆっくり過ごすことにします。充電タイムです。"}
-  {:username "emma"
-   :content "今日はお菓子作りをしました。クッキーがおいしくできたので満足です。"}
-  {:username "emma"
-   :content "新しいカフェを発見しました。インテリアもおしゃれで素敵でした。"}
-  {:username "emma"
-   :content "今度の休みに旅行に行く計画を立てています。どこに行こうかな。"}
-  {:username "frank"
-   :content "今日はジョギングをしました。気持ちの良い汗をかくことができました。"}
-  {:username "frank"
-   :content "新しい技術について勉強中です。毎日少しずつ進んでいます。"}
-  {:username "frank"
-   :content "週末は友人とゲームをする予定です。楽しみです。"}
-  {:username "grace"
-   :content "今日はお花を買って部屋に飾りました。部屋が明るくなりました。"}
-  {:username "grace"
-   :content "新しいレシピに挑戦しました。意外と上手くできたので自信がつきました。"}
-  {:username "grace"
-   :content "今週は忙しいですが、充実した日々を送っています。"}]
-
  :follows
  [["alice" "bob"]
   ["alice" "carol"]
