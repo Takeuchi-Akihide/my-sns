@@ -10,6 +10,7 @@
             [buddy.auth.backends.token :refer [jws-backend]]
             [buddy.auth.middleware :refer [wrap-authentication]]
             [my-sns.handler.auth :as auth]
+            [my-sns.handler.ws :as ws]
             [my-sns.redis :as redis]
             [my-sns.schema :as schema]
             [my-sns.worker :as worker]))
@@ -55,6 +56,16 @@
       (handler (assoc-in req [:identity :user_id] (parse-uuid user-id-str)))
       (handler req))))
 
+(defn wrap-ws-token-to-header [handler]
+  (fn [req]
+    (let [token (get-in req [:params :token])
+          auth-header (get-in req [:headers "authorization"])]
+      (if (and token (nil? auth-header))
+        (let [fake-auth (str "Token " token)
+              req' (assoc-in req [:headers "authorization"] fake-auth)]
+          (handler req'))
+        (handler req)))))
+
 (defn check-required-params [id params]
   (when-not id
     (throw (ex-info "Authentication required" {:type :unauthorized})))
@@ -71,7 +82,7 @@
 
     (if (schema/get-user-by-id my-uuid)
       (let [user-id my-uuid
-            parent-id (when parent-id
+            parent-id (when (seq parent-id)
                         (parse-uuid-param parent-id))
             res (schema/create-post! user-id parent-id content)]
         (if parent-id
@@ -256,7 +267,7 @@
         (let [post-uuid (parse-uuid-param post-id)
               post-owner-id (schema/get-user-id-by-post post-uuid)
               ret (schema/like-post! my-uuid post-uuid)]
-          (async/put! worker/event-chan {:type :like
+          (async/put! worker/event-chan {:type :like-created
                                          :user-id post-owner-id
                                          :actor-id my-uuid
                                          :post-id post-uuid})
@@ -308,21 +319,23 @@
   (-> (ring/ring-handler
        (ring/router
         ["/api/v1"
-         {:middleware [[wrap-authentication auth-backend]
+         {:middleware [wrap-ws-token-to-header
+                       [wrap-authentication auth-backend]
                        wrap-parse-identity-uuid]}
-         ["/login"     {:post auth/login-handler}]
+         ["/ws" {:get ws/ws-handler}]
+         ["/login" {:post auth/login-handler}]
          ["/users"
           ;; POST/PUT/DELETE: /api/v1/users
-          [""           {:post post-user-handler
-                         :put put-user-handler
-                         :delete delete-user-handler}]
+          ["" {:post post-user-handler
+               :put put-user-handler
+               :delete delete-user-handler}]
           ;; GET: /api/v1/users/user1
           ["/:username" {:get get-user-handler}]]
          ["/posts"
           ;; GET:  /api/v1/posts?username=user1
           ;; POST: /api/v1/posts
-          [""          {:get list-posts-handler
-                        :post post-posts-handler}]
+          ["" {:get list-posts-handler
+               :post post-posts-handler}]
           ;; DELETE: /api/v1/posts/456
           ["/:post_id" {:get list-posts-replies-handler
                         :delete delete-posts-handler}]
@@ -330,11 +343,11 @@
                              :delete post-unlike-handler}]]
          ["/follows"
           ;; GET: /api/v1/follows?username=user1
-          [""                 {:get list-follows-handler}]
+          ["" {:get list-follows-handler}]
           ;; POST/DELETE: /api/v1/follows/user1
           ["/:target_username" {:post post-follow-handler
                                 :delete delete-follow-handler}]]
-         ["/timeline"      {:get list-timeline-handler}]])
+         ["/timeline" {:get list-timeline-handler}]])
        (ring/routes
         (ring/create-resource-handler {:path "/"})
        (ring/create-default-handler {:not-found (constantly {:status 404 :body "Not found"})})))

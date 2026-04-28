@@ -8,14 +8,18 @@
 (defn process-event! [event]
   (println "event received:" event)
   (case (:type event)
-    :like (schema/insert-notification! (:user-id event) (:actor-id event) (:post-id event) "LIKE")
     :unlike (schema/delete-notification! (:user-id event) (:actor-id event) (:post-id event) "LIKE")
+    :like-created
+    (let [{:keys [user-id actor-id post-id]} event]
+      (when (and user-id (not= actor-id user-id))
+        (schema/insert-notification! user-id actor-id post-id "LIKE")
+        (redis/publish-notification! user-id actor-id post-id "LIKE")))
     :reply-created
     (let [{:keys [actor-id post-id parent-id]} event
           owner-id (schema/get-user-id-by-post parent-id)]
       (when (and owner-id (not= actor-id owner-id))
-        (println "Inserting notification for reply:" owner-id actor-id post-id)
-        (schema/insert-notification! owner-id actor-id post-id "REPLY")))
+        (schema/insert-notification! owner-id actor-id post-id "REPLY")
+        (redis/publish-notification! owner-id actor-id post-id "REPLY")))
     :post-created
     (let [{:keys [post-id author-id]} event
           follower-ids (map :users/id (schema/list-followers author-id))]
@@ -47,3 +51,10 @@
       (catch Exception e
         (println "Write-Back failed:" e)))
     (recur)))
+
+(defn start-all-background-services! []
+  (println "Initializing background services...")
+  (start-worker)
+  (start-sync-worker)
+  (redis/start-pubsub-listerner!)
+  (println "All background services started."))

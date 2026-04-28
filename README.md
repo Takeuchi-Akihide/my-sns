@@ -102,6 +102,7 @@ DB 接続先を変更したい場合は `DATABASE_URL` を指定できます。
 - `lein run server`: サーバー起動
 - `lein run recreate`: DB スキーマの再作成 (開発用)
 - `lein run load-sample`: サンプルデータの投入 (開発用)
+- `./scripts/dev-seed-activity.sh`: dev server に投稿・返信・いいねを流す
 
 ```bash
 DATABASE_URL='jdbc:postgresql://localhost:5432/mysns_db?user=dev&password=password' lein run server
@@ -111,6 +112,32 @@ DATABASE_URL='jdbc:postgresql://localhost:5432/mysns_db?user=dev&password=passwo
 
 ```bash
 lein run recreate
+```
+
+`load-sample` でユーザーとフォロー関係を投入したあとに、投稿・返信・いいねをまとめて流す場合:
+
+```bash
+lein run load-sample
+lein run server
+./scripts/dev-seed-activity.sh
+```
+
+別ポートや別ホストでサーバーを起動している場合:
+
+```bash
+BASE_URL=http://localhost:4040 ./scripts/dev-seed-activity.sh
+```
+
+一定間隔で流し続ける場合:
+
+```bash
+LOOP_MODE=1 INTERVAL_SECONDS=10 ./scripts/dev-seed-activity.sh
+```
+
+5回だけ流したい場合:
+
+```bash
+LOOP_MODE=1 ITERATIONS=5 INTERVAL_SECONDS=3 ./scripts/dev-seed-activity.sh
 ```
 
 ## API 実行例

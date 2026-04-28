@@ -1,5 +1,7 @@
 (ns my-sns.redis
-  (:require [taoensso.carmine :as car]))
+  (:require [clojure.data.json :as json]
+            [taoensso.carmine :as car]
+            [my-sns.handler.ws :as ws]))
 
 (def server1-conn {:pool {} :spec {:uri "redis://localhost:6379"}})
 (def BATCH-SIZE 100)
@@ -31,3 +33,19 @@
 
 (defn get-timeline-ids [user-id start end]
   (wcar* (car/lrange (str "timeline:" user-id) start end)))
+
+(defn start-pubsub-listerner! []
+  (println "Starting Redis Pub/Sub listener...")
+  (car/with-new-pubsub-listener (:spec server1-conn)
+    {"notifications" (fn [[_ _ msg]]
+                       (let [parsed-msg (json/read-str msg :key-fn keyword)
+                             recipient (:recipient-id parsed-msg)]
+                         (ws/send-notification-to-user! recipient parsed-msg)))}
+    (car/subscribe "notifications")))
+
+(defn publish-notification! [recipient-id actor-id post-id type]
+  (let [notification-data {:recipient-id recipient-id
+                           :actor-id actor-id
+                           :post-id post-id
+                           :type type}]
+    (wcar* (car/publish "notifications" (json/write-str notification-data)))))

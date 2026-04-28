@@ -5,6 +5,8 @@
             :url "https://www.eclipse.org/legal/epl-2.0/"}
   :dependencies [[org.clojure/clojure "1.11.1"]
                  [org.clojure/core.async "1.5.648"]
+                 [org.clojure/data.json "2.5.2"]
+                 [http-kit "2.8.1"]
                  [com.github.seancorfield/next.jdbc "1.3.894"]
                  [com.taoensso/carmine "3.3.1"]
                  [org.postgresql/postgresql "42.7.3"]

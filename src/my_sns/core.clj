@@ -1,5 +1,5 @@
 (ns my-sns.core
-  (:require [ring.adapter.jetty :refer [run-jetty]]
+  (:require [org.httpkit.server :as http-kit]
             [my-sns.handler :refer [app]]
             [my-sns.schema :as schema]
             [my-sns.worker :as worker]
@@ -13,10 +13,9 @@
     "server" (do
                (println "Starting my-sns server...")
                (schema/create-schema!)
-               (worker/start-worker)
-               (worker/start-sync-worker)
-               (run-jetty app {:port (Integer/parseInt (or (System/getenv "PORT") "3030"))
-                               :join? true}))
+               (worker/start-all-background-services!)
+               (http-kit/run-server app {:port (Integer/parseInt (or (System/getenv "PORT") "3030"))
+                                         :join? true}))
     "recreate" (do
                  (println "Dropping schema...")
                  (my-sns.schema/drop-schema!)
