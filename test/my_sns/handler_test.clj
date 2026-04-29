@@ -2,7 +2,6 @@
   (:require [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.test :refer :all]
-            [my-sns.db :as db]
             [my-sns.handler :as handler]
             [my-sns.test-util :as test-util]))
 
@@ -122,7 +121,7 @@
     (testing "フォロー成功"
       (is (= 201 (:status ok-response)))
       (is (= "Followed successfully" (:message ok-body)))
-      (is (= 1 (count (db/query ["SELECT * FROM follows"])))))
+      (is (= 1 (count (test-util/query ["SELECT * FROM follows"])))))
     (testing "存在しないユーザーのフォローは404"
       (is (= 404 (:status ng-response)))
       (is (= "Not Found" (:error ng-body))))))
@@ -190,7 +189,7 @@
         (is (= "Unliked successfully" (:message unlike-body)))
         (is (= 0 (-> timeline-after-unlike :data first :likes-count))))
       (testing "post_likesにも反映される"
-        (is (= 0 (count (db/query ["SELECT * FROM post_likes WHERE post_id = ?" (parse-uuid post-id)]))))))))
+        (is (= 0 (count (test-util/query ["SELECT * FROM post_likes WHERE post_id = ?" (parse-uuid post-id)]))))))))
 
 (deftest test-delete-post-forbidden
   (create-user! "owner")

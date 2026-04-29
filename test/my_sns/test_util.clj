@@ -1,5 +1,7 @@
 (ns my-sns.test-util
   (:require [clojure.core.async :as async]
+            [next.jdbc :as jdbc]
+            [my-sns.db :as db]
             [my-sns.redis :as redis]
             [my-sns.schema :as schema]
             [my-sns.worker :as worker]))
@@ -69,3 +71,6 @@
 (defn with-test-env [f]
   (with-test-db
     #(with-mocked-redis f)))
+
+(defn query [sql-params]
+  (jdbc/execute! db/*current-db* sql-params))
