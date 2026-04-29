@@ -354,7 +354,7 @@
       wrap-global-exception-handling
       (wrap-cors :access-control-allow-origin [#".*"]
                  :access-control-allow-methods [:get :post :put :delete]
-                 :access-control-allow-headers ["Content-Type"])
+                 :access-control-allow-headers ["Content-Type" "Authorization"])
       (wrap-json-body {:keywords? true})
       wrap-keyword-params
       wrap-params))

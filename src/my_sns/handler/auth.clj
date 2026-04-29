@@ -11,11 +11,13 @@
 
 (defn login-handler [req]
   (let [{:keys [username password]} (:body req)
-        user (schema/get-user-by-username username)]
+        user (schema/get-user-by-username username)
+        password-hash (schema/get-password-hash-by-id (:users/id user))]
 
-    (if (and user (hashers/check password (:users/password_hash user)))
+    (if (and user (hashers/check password password-hash))
       (let [token (jwt/sign {:user_id (:users/id user)
                              :exp (.getTime (java.util.Date. (+ (System/currentTimeMillis) (* 1000 60 60 24))))} ;; 1日有効
                             secret)]
+        (println "User" username "logged in successfully.")
         {:status 200 :body {:token token}})
       (throw (ex-info "Invalid username or password" {:type :unauthorized})))))

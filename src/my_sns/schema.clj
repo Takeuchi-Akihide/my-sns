@@ -74,7 +74,8 @@
 (defn get-user-by-username
   [username]
   (jdbc/execute-one! datasource
-                     ["SELECT * FROM users WHERE username = ?"
+                     ["SELECT id, username, display_name, bio, created_at, updated_at
+                       FROM users WHERE username = ?"
                       username]))
 
 (defn get-user-by-id
@@ -83,6 +84,13 @@
                      ["SELECT id, username, display_name, bio, created_at, updated_at
                        FROM users WHERE id = ?"
                       user-id]))
+
+(defn get-password-hash-by-id
+  [user-id]
+  (-> (jdbc/execute-one! datasource
+                     ["SELECT password_hash FROM users WHERE id = ?"
+                      user-id])
+      :users/password_hash))
 
 (defn get-user-id-by-post
   [post-id]
