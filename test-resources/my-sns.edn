@@ -1,1 +1,2 @@
-{:db-url "jdbc:postgresql://localhost:5432/mysns_test_db?user=dev&password=password"}
+{:db-master-url "jdbc:postgresql://localhost:54321/mysns_test_db?user=dev&password=password"
+ :db-replica-url "jdbc:postgresql://localhost:54321/mysns_test_db?user=dev&password=password"}

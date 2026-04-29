@@ -49,3 +49,12 @@
                            :post-id post-id
                            :type type}]
     (wcar* (car/publish "notifications" (json/write-str notification-data)))))
+
+(defn mark-recently-posted! [user-id]
+  (let [key (str "write-flag:" user-id)]
+    (wcar* (car/set key "1")
+           (car/expire key 3))))
+
+(defn get-recently-posted [user-id]
+  (let [key (str "write-flag:" user-id)]
+    (some? (wcar* (car/get key)))))

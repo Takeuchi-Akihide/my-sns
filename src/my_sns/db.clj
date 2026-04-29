@@ -1,34 +1,27 @@
 (ns my-sns.db
-  (:require [next.jdbc :as jdbc]
-            [next.jdbc.result-set :as rs]
+  (:require [hikari-cp.core :as hikari]
             [aero.core :as aero]
             [clojure.java.io :as io]))
 
-(defn- load-config
-  []
+(defn- load-config []
   (if-let [resource (io/resource "my-sns.edn")]
     (aero/read-config resource)
-    {:db-url "jdbc:postgresql://localhost:5432/mysns_db?user=dev&password=password"}))
+    {:db-master-url "jdbc:postgresql://localhost:5432/mysns_db?user=dev&password=password"
+     :db-replica-url "jdbc:postgresql://localhost:5432/mysns_db?user=dev&password=password"}))
 
-(defn- postgres-spec
-  []
-  (let [config (load-config)
-        db-url (or (System/getenv "DATABASE_URL")
-                   (:db-url config))]
-    {:jdbcUrl db-url}))
+(defn- make-ds [url max-pool-size]
+  (hikari/make-datasource
+   {:jdbc-url url
+    :maximumPoolSize max-pool-size}))
 
-(def datasource (jdbc/get-datasource (postgres-spec)))
+(defonce master-ds (make-ds (or (System/getenv "DATABASE_MASTER_URL")
+                                (:db-master-url (load-config))) 10))
+(defonce replica-ds (make-ds (or (System/getenv "DATABASE_REPLICA_URL")
+                                 (:db-replica-url (load-config))) 10))
 
-(def ^:dynamic *tx* nil)
+(def ^:dynamic *current-db* replica-ds)
 
-(defn query
-  "SQLクエリを実行して結果をMapのリストで返す"
-  [sql-params]
-  (jdbc/execute! (or *tx* datasource) sql-params
-                 {:builder-fn rs/as-unqualified-lower-maps}))
-
-(defn query-one
-  "SQLクエリを実行して最初の一件を返す"
-  [sql-params]
-  (jdbc/execute-one! (or *tx* datasource) sql-params
-                     {:builder-fn rs/as-unqualified-lower-maps}))
+(defmacro with-master
+  [& body]
+  `(binding [*current-db* master-ds]
+     ~@body))
