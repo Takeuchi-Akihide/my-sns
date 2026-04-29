@@ -9,6 +9,7 @@
             [buddy.hashers :as hashers]
             [buddy.auth.backends.token :refer [jws-backend]]
             [buddy.auth.middleware :refer [wrap-authentication]]
+            [my-sns.db :as db]
             [my-sns.handler.auth :as auth]
             [my-sns.handler.ws :as ws]
             [my-sns.redis :as redis]
@@ -66,6 +67,16 @@
           (handler req'))
         (handler req)))))
 
+(defn wrap-sticky-master [handler]
+  (fn [req]
+    (let [user-id (-> req :identity :user_id)
+          recently-posted? (when user-id
+                             (redis/get-recently-posted user-id))]
+      (if recently-posted?
+        (db/with-master
+          (handler req))
+        (handler req)))))
+
 (defn check-required-params [id params]
   (when-not id
     (throw (ex-info "Authentication required" {:type :unauthorized})))
@@ -85,6 +96,7 @@
             parent-id (when (seq parent-id)
                         (parse-uuid-param parent-id))
             res (schema/create-post! user-id parent-id content)]
+        (redis/mark-recently-posted! user-id)
         (if parent-id
           (async/put! worker/event-chan {:type :reply-created
                                          :actor-id my-uuid
@@ -321,7 +333,8 @@
         ["/api/v1"
          {:middleware [wrap-ws-token-to-header
                        [wrap-authentication auth-backend]
-                       wrap-parse-identity-uuid]}
+                       wrap-parse-identity-uuid
+                       wrap-sticky-master]}
          ["/ws" {:get ws/ws-handler}]
          ["/login" {:post auth/login-handler}]
          ["/users"
@@ -354,7 +367,7 @@
       wrap-global-exception-handling
       (wrap-cors :access-control-allow-origin [#".*"]
                  :access-control-allow-methods [:get :post :put :delete]
-                 :access-control-allow-headers ["Content-Type"])
+                 :access-control-allow-headers ["Content-Type" "Authorization"])
       (wrap-json-body {:keywords? true})
       wrap-keyword-params
       wrap-params))

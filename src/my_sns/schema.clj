@@ -1,7 +1,7 @@
 (ns my-sns.schema
   (:require [next.jdbc :as jdbc]
             [next.jdbc.sql :as sql]
-            [my-sns.db :refer [datasource]]
+            [my-sns.db :refer [*current-db* with-master]]
             [my-sns.redis :as redis]))
 
 (def ddl-statements
@@ -62,76 +62,88 @@
       created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     );"
    "CREATE INDEX IF NOT EXISTS idx_notifications_user_id ON notifications(user_id, created_at DESC);"
-   "CREATE UNIQUE INDEX IF NOT EXISTS idx_notifications_upsert_target ON notifications(user_id, actor_id, post_id, type) WHERE is_read = FALSE;"
-   ])
+   "CREATE UNIQUE INDEX IF NOT EXISTS idx_notifications_upsert_target ON notifications(user_id, actor_id, post_id, type) WHERE is_read = FALSE;"])
 
 (defn add-user!
   [username display-name email password-hash]
-  (jdbc/execute! datasource
-                 ["INSERT INTO users (username, display_name, email, password_hash) VALUES (?, ?, ?, ?)"
-                  username display-name email password-hash]))
+  (with-master
+    (jdbc/execute! *current-db*
+                   ["INSERT INTO users (username, display_name, email, password_hash) VALUES (?, ?, ?, ?)"
+                    username display-name email password-hash])))
 
 (defn get-user-by-username
   [username]
-  (jdbc/execute-one! datasource
-                     ["SELECT * FROM users WHERE username = ?"
+  (jdbc/execute-one! *current-db*
+                     ["SELECT id, username, display_name, bio, created_at, updated_at
+                       FROM users WHERE username = ?"
                       username]))
 
 (defn get-user-by-id
   [user-id]
-  (jdbc/execute-one! datasource
+  (jdbc/execute-one! *current-db*
                      ["SELECT id, username, display_name, bio, created_at, updated_at
                        FROM users WHERE id = ?"
                       user-id]))
 
+(defn get-password-hash-by-id
+  [user-id]
+  (-> (jdbc/execute-one! *current-db*
+                         ["SELECT password_hash FROM users WHERE id = ?"
+                          user-id])
+      :users/password_hash))
+
 (defn get-user-id-by-post
   [post-id]
-  (-> (jdbc/execute-one! datasource
+  (-> (jdbc/execute-one! *current-db*
                          ["SELECT user_id FROM posts WHERE id = ?"
                           post-id])
       :posts/user_id))
 
 (defn search-users
   [username-prefix limit]
-  (jdbc/execute! datasource
+  (jdbc/execute! *current-db*
                  ["SELECT id, username, bio FROM users WHERE username LIKE ? ORDER BY username LIMIT ?"
                   (str username-prefix "%") limit]))
 
 (defn update-user!
   [user-id updates-map]
-  (sql/update! datasource
-               :users
-               (assoc updates-map :updated_at (java.time.OffsetDateTime/now))
-               {:id user-id}))
+  (with-master
+    (sql/update! *current-db*
+                 :users
+                 (assoc updates-map :updated_at (java.time.OffsetDateTime/now))
+                 {:id user-id})))
 
 (defn delete-user!
   [user-id]
-  (jdbc/execute! datasource
-                 ["DELETE FROM users WHERE id = ?"
-                  user-id]))
+  (with-master
+    (jdbc/execute! *current-db*
+                   ["DELETE FROM users WHERE id = ?"
+                    user-id])))
 
 (defn create-post!
   [user-id parent-id content]
-  (jdbc/with-transaction [tx datasource]
-    (let [created-post (jdbc/execute-one! tx
-                                          ["INSERT INTO posts (user_id, parent_id, content) VALUES (?, ?, ?) RETURNING *"
-                                           user-id parent-id content])]
-      (when parent-id
-        (jdbc/execute! tx
-                       ["UPDATE posts SET replies_count = replies_count + 1 WHERE id = ?"
-                        parent-id]))
-      created-post)))
+  (with-master
+    (jdbc/with-transaction [tx *current-db*]
+      (let [created-post (jdbc/execute-one! tx
+                                            ["INSERT INTO posts (user_id, parent_id, content) VALUES (?, ?, ?) RETURNING *"
+                                             user-id parent-id content])]
+        (when parent-id
+          (jdbc/execute! tx
+                         ["UPDATE posts SET replies_count = replies_count + 1 WHERE id = ?"
+                          parent-id]))
+        created-post))))
 
 (defn delete-post!
   [post-id]
-  (jdbc/with-transaction [tx datasource]
-    (let [post (jdbc/execute-one! tx ["SELECT parent_id FROM posts WHERE id = ?" post-id])]
-      (when (:posts/parent_id post)
+  (with-master
+    (jdbc/with-transaction [tx *current-db*]
+      (let [post (jdbc/execute-one! tx ["SELECT parent_id FROM posts WHERE id = ?" post-id])]
+        (when (:posts/parent_id post)
         (jdbc/execute! tx ["UPDATE posts SET replies_count = GREATEST(replies_count - 1, 0) WHERE id = ?" (:posts/parent_id post)]))
-      (jdbc/execute! tx ["DELETE FROM posts WHERE id = ?" post-id]))))
+      (jdbc/execute! tx ["DELETE FROM posts WHERE id = ?" post-id])))))
 
 (defn get-posts-by-ids [my-uuid post-ids]
-  (jdbc/execute! datasource
+  (jdbc/execute! *current-db*
                  ["SELECT p.id, p.content, p.created_at, p.user_id, p.replies_count, 
                           u.username, u.display_name, u.bio,
                           EXISTS (SELECT 1 FROM post_likes WHERE post_id = p.id AND user_id = ?) as is_liked
@@ -144,19 +156,21 @@
 
 (defn follow-user!
   [follower-id followed-id]
-  (jdbc/execute! datasource
-                 ["INSERT INTO follows (follower_id, followed_id) VALUES (?, ?) ON CONFLICT DO NOTHING"
-                  follower-id followed-id]))
+  (with-master
+    (jdbc/execute! *current-db*
+                   ["INSERT INTO follows (follower_id, followed_id) VALUES (?, ?) ON CONFLICT DO NOTHING"
+                    follower-id followed-id])))
 
 (defn unfollow-user!
   [follower-id followed-id]
-  (jdbc/execute! datasource
-                 ["DELETE FROM follows WHERE follower_id = ? AND followed_id = ?"
-                  follower-id followed-id]))
+  (with-master
+    (jdbc/execute! *current-db*
+                   ["DELETE FROM follows WHERE follower_id = ? AND followed_id = ?"
+                    follower-id followed-id])))
 
 (defn list-posts
   [user-id limit]
-  (jdbc/execute! datasource
+  (jdbc/execute! *current-db*
                  ["SELECT p.id, p.content, p.created_at, u.username
                    FROM posts p
                    JOIN users u ON p.user_id = u.id
@@ -167,7 +181,7 @@
 
 (defn list-follows
   [user-id]
-  (jdbc/execute! datasource
+  (jdbc/execute! *current-db*
                  ["SELECT u.id, u.username
                    FROM follows f
                    JOIN users u ON f.followed_id = u.id
@@ -176,7 +190,7 @@
 
 (defn list-followers
   [user-id]
-  (jdbc/execute! datasource
+  (jdbc/execute! *current-db*
                  ["SELECT u.id, u.username
                    FROM follows f
                    JOIN users u ON f.follower_id = u.id
@@ -185,37 +199,40 @@
 
 (defn like-post!
   [user-id post-id]
-  (let [inserted? (jdbc/execute-one! datasource
-                                     ["INSERT INTO post_likes (user_id, post_id) 
+  (with-master
+    (let [inserted? (jdbc/execute-one! *current-db*
+                                       ["INSERT INTO post_likes (user_id, post_id) 
                                        VALUES (?, ?) ON CONFLICT DO NOTHING"
-                                      user-id post-id])]
-    (if (pos? (:next.jdbc/update-count inserted?))
-      (do (redis/incr-like-count post-id)
-          (redis/mark-dirty! post-id)
-          {:status 200 :message "Liked successfully"})
-      {:status 200 :message "Already liked"})))
+                                        user-id post-id])]
+      (if (pos? (:next.jdbc/update-count inserted?))
+        (do (redis/incr-like-count post-id)
+            (redis/mark-dirty! post-id)
+            {:status 200 :message "Liked successfully"})
+        {:status 200 :message "Already liked"}))))
 
 (defn unlike-post!
   [user-id post-id]
-  (let [deleted-result (first (jdbc/execute! datasource
-                                            ["DELETE FROM post_likes WHERE user_id = ? AND post_id = ?"
-                                             user-id post-id]))]
-    (if (and deleted-result (pos? (:next.jdbc/update-count deleted-result)))
-      (do (redis/decr-like-count post-id)
-          (redis/mark-dirty! post-id)
-          {:status 200 :message "Unliked successfully"})
-      {:status 200 :message "Not liked"})))
+  (with-master
+    (let [deleted-result (first (jdbc/execute! *current-db*
+                                               ["DELETE FROM post_likes WHERE user_id = ? AND post_id = ?"
+                                                user-id post-id]))]
+      (if (and deleted-result (pos? (:next.jdbc/update-count deleted-result)))
+        (do (redis/decr-like-count post-id)
+            (redis/mark-dirty! post-id)
+            {:status 200 :message "Unliked successfully"})
+        {:status 200 :message "Not liked"}))))
 
 (defn sync-like-count!
   [post-id current-count]
-  (jdbc/execute! datasource
-                 ["UPDATE posts SET likes_count = ? WHERE id = ?"
-                  current-count post-id]))
+  (with-master
+    (jdbc/execute! *current-db*
+                   ["UPDATE posts SET likes_count = ? WHERE id = ?"
+                    current-count post-id])))
 
 (defn list-post-replies
   ;; 1つ下の階層の子投稿を取得する。これを使いまわすことでリプライ一覧が取得可能なはず。
   [post-id limit]
-  (jdbc/execute! datasource
+  (jdbc/execute! *current-db*
                  ["SELECT p.id, p.content, p.created_at, u.username
                     FROM posts p
                     JOIN users u ON p.user_id = u.id
@@ -226,22 +243,25 @@
 
 (defn insert-notification!
   [user-id actor-id post-id type]
-  (jdbc/execute! datasource
-                 ["INSERT INTO notifications (user_id, actor_id, post_id, type) VALUES (?, ?, ?, ?)
-                   ON CONFLICT (user_id, actor_id, post_id, type) WHERE is_read = FALSE 
-                   DO UPDATE SET created_at = CURRENT_TIMESTAMP"
-                  user-id actor-id post-id type]))
+  (with-master
+    (jdbc/execute! *current-db*
+                   ["INSERT INTO notifications (user_id, actor_id, post_id, type) VALUES (?, ?, ?, ?)
+                     ON CONFLICT (user_id, actor_id, post_id, type) WHERE is_read = FALSE 
+                     DO UPDATE SET created_at = CURRENT_TIMESTAMP"
+                    user-id actor-id post-id type])))
 
 (defn delete-notification!
   [user-id actor-id post-id type]
-  (jdbc/execute! datasource
-                 ["DELETE FROM notifications WHERE user_id = ? AND actor_id = ? AND post_id = ? AND type = ?"
-                  user-id actor-id post-id type]))
+  (with-master
+    (jdbc/execute! *current-db*
+                   ["DELETE FROM notifications WHERE user_id = ? AND actor_id = ? AND post_id = ? AND type = ?"
+                    user-id actor-id post-id type])))
 
 (defn create-schema!
   []
-  (doseq [stmt ddl-statements]
-    (jdbc/execute! datasource [stmt])))
+  (with-master
+    (doseq [stmt ddl-statements]
+      (jdbc/execute! *current-db* [stmt]))))
 
 (defn drop-schema!
   "Drop tables (for development)"
@@ -251,4 +271,5 @@
                 "DROP TABLE IF EXISTS posts;"
                 "DROP TABLE IF EXISTS follows;"
                 "DROP TABLE IF EXISTS users;"]]
-    (jdbc/execute! datasource [stmt])))
+    (with-master
+      (jdbc/execute! *current-db* [stmt]))))

@@ -2,7 +2,6 @@
   (:require [clojure.test :refer :all]
             [clojure.string :as str]
             [buddy.hashers :as hashers]
-            [my-sns.db :as db]
             [my-sns.schema :as schema]
             [my-sns.test-util :as test-util]))
 
@@ -24,8 +23,10 @@
       (let [user (schema/get-user-by-username username)]
         (is (not (nil? user)))
         (is (= username (:users/username user)))
-        (is (= email (:users/email user)))
-        (is (= display-name (:users/display_name user)))))))
+        (is (= display-name (:users/display_name user)))
+        (is (= email (-> (test-util/query ["SELECT email FROM users WHERE username = ?" username])
+                         first
+                         :users/email)))))))
 
 (deftest test-get-user-by-username
   (let [username "testuser"
@@ -38,7 +39,7 @@
     (testing "ユーザー名からユーザー情報を取得できる"
       (let [user (schema/get-user-by-username username)]
         (is (= username (:users/username user)))
-        (is (= email (:users/email user)))))
+        (is (= display-name (:users/display_name user)))))
 
     (testing "存在しないユーザー名の場合はnilを返す"
       (is (nil? (schema/get-user-by-username "nonexistent"))))))
@@ -286,8 +287,8 @@
       (testing "投稿にいいねできる"
         (let [ret (schema/like-post! user-id (:posts/id post))]
           (is (= "Liked successfully" (:message ret)))
-          (is (= 1 (count (db/query ["SELECT * FROM post_likes WHERE user_id = ? AND post_id = ?"
-                                     user-id (:posts/id post)])))))))))
+          (is (= 1 (count (test-util/query ["SELECT * FROM post_likes WHERE user_id = ? AND post_id = ?"
+                                            user-id (:posts/id post)])))))))))
 
 (deftest test-unlike-post
   (let [username "unlikeuser"
@@ -304,8 +305,8 @@
         (schema/like-post! user-id (:posts/id post))
         (let [ret (schema/unlike-post! user-id (:posts/id post))]
           (is (= "Unliked successfully" (:message ret)))
-          (is (empty? (db/query ["SELECT * FROM post_likes WHERE user_id = ? AND post_id = ?"
-                                 user-id (:posts/id post)]))))))))
+          (is (empty? (test-util/query ["SELECT * FROM post_likes WHERE user_id = ? AND post_id = ?"
+                                        user-id (:posts/id post)]))))))))
 
 ;; ==============================
 ;; 検索関連のテスト
