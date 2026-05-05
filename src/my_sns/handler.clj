@@ -148,7 +148,7 @@
         target-user (-> req :params :username)
         _ (check-required-params my-uuid {"username" target-user})
         limit (parse-long-query-param (:params req) :limit LIMIT {:min 1 :max MAX_LIMIT})]
-   
+
     (if (schema/get-user-by-id my-uuid)
       (if-let [user (schema/get-user-by-username target-user)]
         (let [user-id (:users/id user)
@@ -182,7 +182,6 @@
         params (:params req)
         limit (parse-long-query-param params :limit LIMIT {:min 1 :max MAX_LIMIT})
         offset (parse-long-query-param params :offset 0 {:min 0})]
-    (check-required-params my-uuid {"username" target-user})
 
     (if (schema/get-user-by-id my-uuid)
       (if-let [user (schema/get-user-by-username target-user)]

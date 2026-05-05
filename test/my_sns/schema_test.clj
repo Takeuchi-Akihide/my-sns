@@ -210,7 +210,7 @@
 
       (testing "ユーザーをフォローできる"
         (schema/follow-user! user1-id user2-id)
-        (let [follows (schema/list-follows user1-id)]
+        (let [follows (schema/list-follows user1-id 20 0)]
           (is (= 1 (count follows)))
           (is (= username2 (:users/username (first follows)))))))))
 
@@ -235,7 +235,7 @@
 
       (testing "ユーザーをアンフォローできる"
         (schema/unfollow-user! user1-id user2-id)
-        (let [follows (schema/list-follows user1-id)]
+        (let [follows (schema/list-follows user1-id 20 0)]
           (is (= 0 (count follows))))))))
 
 (deftest test-list-follows
@@ -264,10 +264,35 @@
       (testing "フォロー一覧を取得できる"
         (schema/follow-user! user1-id user2-id)
         (schema/follow-user! user1-id user3-id)
-        (let [follows (schema/list-follows user1-id)]
+        (let [follows (schema/list-follows user1-id 20 0)]
           (is (= 2 (count follows)))
           (is (contains? (set (map :users/username follows)) username2))
           (is (contains? (set (map :users/username follows)) username3)))))))
+
+(deftest test-list-followers
+  (let [username1 "followed-list"
+        username2 "follower-list1"
+        username3 "follower-list2"
+        password-hash (hashers/derive "password")]
+    (schema/add-user! username1 "Followed List" "followedlist@example.com" password-hash)
+    (schema/add-user! username2 "Follower List 1" "followerlist1@example.com" password-hash)
+    (schema/add-user! username3 "Follower List 2" "followerlist2@example.com" password-hash)
+
+    (let [user1-id (:users/id (schema/get-user-by-username username1))
+          user2-id (:users/id (schema/get-user-by-username username2))
+          user3-id (:users/id (schema/get-user-by-username username3))]
+      (testing "フォロワー一覧を取得できる"
+        (schema/follow-user! user2-id user1-id)
+        (schema/follow-user! user3-id user1-id)
+        (let [followers (schema/list-followers user1-id 20 0)]
+          (is (= 2 (count followers)))
+          (is (contains? (set (map :users/username followers)) username2))
+          (is (contains? (set (map :users/username followers)) username3))))
+      (testing "全フォロワー一覧を取得できる"
+        (let [followers (schema/list-all-followers user1-id)]
+          (is (= 2 (count followers)))
+          (is (contains? (set (map :users/username followers)) username2))
+          (is (contains? (set (map :users/username followers)) username3)))))))
 
 ;; ==============================
 ;; いいね操作のテスト
