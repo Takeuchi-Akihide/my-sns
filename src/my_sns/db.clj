@@ -1,7 +1,9 @@
 (ns my-sns.db
   (:require [hikari-cp.core :as hikari]
             [aero.core :as aero]
-            [clojure.java.io :as io]))
+            [clojure.java.io :as io])
+  (:import [java.io PrintWriter]
+           [javax.sql DataSource]))
 
 (defn- load-config []
   (if-let [resource (io/resource "my-sns.edn")]
@@ -14,9 +16,31 @@
    {:jdbc-url url
     :maximumPoolSize max-pool-size}))
 
-(defonce master-ds (make-ds (or (System/getenv "DATABASE_MASTER_URL")
+(defn- lazy-ds [url max-pool-size]
+  (let [delegate (delay (make-ds url max-pool-size))]
+    (reify DataSource
+      (getConnection [_]
+        (.getConnection ^DataSource @delegate))
+      (getConnection [_ username password]
+        (.getConnection ^DataSource @delegate username password))
+      (getLogWriter [_]
+        (.getLogWriter ^DataSource @delegate))
+      (setLogWriter [_ writer]
+        (.setLogWriter ^DataSource @delegate ^PrintWriter writer))
+      (setLoginTimeout [_ seconds]
+        (.setLoginTimeout ^DataSource @delegate seconds))
+      (getLoginTimeout [_]
+        (.getLoginTimeout ^DataSource @delegate))
+      (getParentLogger [_]
+        (.getParentLogger ^DataSource @delegate))
+      (unwrap [_ iface]
+        (.unwrap ^DataSource @delegate iface))
+      (isWrapperFor [_ iface]
+        (.isWrapperFor ^DataSource @delegate iface)))))
+
+(defonce master-ds (lazy-ds (or (System/getenv "DATABASE_MASTER_URL")
                                 (:db-master-url (load-config))) 10))
-(defonce replica-ds (make-ds (or (System/getenv "DATABASE_REPLICA_URL")
+(defonce replica-ds (lazy-ds (or (System/getenv "DATABASE_REPLICA_URL")
                                  (:db-replica-url (load-config))) 10))
 
 (def ^:dynamic *current-db* replica-ds)
