@@ -1,0 +1,52 @@
+name: Build & Test
+
+on:
+  pull_request:
+  push:
+    branches: [master]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: dev
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: mysns_test_db
+        ports:
+          - 54351:5432
+        options: >-
+          --health-cmd "pg_isready -U dev -d mysns_test_db"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '21'
+
+      - name: Install Leiningen
+        uses: DeLaGuardo/setup-clojure@12.5
+        with:
+          lein: latest
+
+      - name: Cache dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: ${{ runner.os }}-lein-${{ hashFiles('project.clj') }}
+          restore-keys: ${{ runner.os }}-lein-
+
+      - name: Run tests
+        run: lein test
+
+      - name: Build Docker image
+        run: docker build -t my-sns:${{ github.sha }} .
