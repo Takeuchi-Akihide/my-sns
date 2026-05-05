@@ -126,6 +126,42 @@
       (is (= 404 (:status ng-response)))
       (is (= "Not Found" (:error ng-body))))))
 
+(deftest test-user-follows-and-followers-api-with-pagination
+  (doseq [username ["target" "related-a" "related-b" "related-c"]]
+    (create-user! username))
+  (let [target-token (login-token! "target")
+        a-token (login-token! "related-a")
+        b-token (login-token! "related-b")
+        c-token (login-token! "related-c")]
+    (doseq [username ["related-a" "related-b" "related-c"]]
+      (call-app (json-request :post (str "/api/v1/follows/" username) nil target-token)))
+    (doseq [token [a-token b-token c-token]]
+      (call-app (json-request :post "/api/v1/follows/target" nil token)))
+    (let [follows-page1-response (call-app
+                                  (json-request :get "/api/v1/users/target/follows?limit=2&offset=0" nil target-token))
+          follows-page2-response (call-app
+                                  (json-request :get "/api/v1/users/target/follows?limit=2&offset=2" nil target-token))
+          followers-response (call-app
+                              (json-request :get "/api/v1/users/target/followers?limit=10&offset=0" nil target-token))
+          invalid-response (call-app
+                            (json-request :get "/api/v1/users/target/follows?limit=abc" nil target-token))
+          follows (concat (-> follows-page1-response parse-body :data)
+                          (-> follows-page2-response parse-body :data))
+          followers (-> followers-response parse-body :data)]
+      (testing "フォロー一覧をページングして取得できる"
+        (is (= 200 (:status follows-page1-response)))
+        (is (= 200 (:status follows-page2-response)))
+        (is (= 3 (count follows)))
+        (is (= #{"related-a" "related-b" "related-c"}
+               (set (map :users/username follows)))))
+      (testing "フォロワー一覧を取得できる"
+        (is (= 200 (:status followers-response)))
+        (is (= #{"related-a" "related-b" "related-c"}
+               (set (map :users/username followers)))))
+      (testing "不正なlimitは400"
+        (is (= 400 (:status invalid-response)))
+        (is (= "Bad Request" (-> invalid-response parse-body :error)))))))
+
 (deftest test-post-api-requires-authentication
   (testing "認証なし投稿は401"
     (let [response (call-app
@@ -190,6 +226,35 @@
         (is (= 0 (-> timeline-after-unlike :data first :likes-count))))
       (testing "post_likesにも反映される"
         (is (= 0 (count (test-util/query ["SELECT * FROM post_likes WHERE post_id = ?" (parse-uuid post-id)]))))))))
+
+(deftest test-user-likes-api-with-pagination
+  (create-user! "liked-post-owner")
+  (create-user! "likes-viewer")
+  (let [owner-token (login-token! "liked-post-owner")
+        viewer-token (login-token! "likes-viewer")
+        first-post-response (call-app
+                             (json-request :post "/api/v1/posts"
+                                           {:content "first liked post"}
+                                           owner-token))
+        second-post-response (call-app
+                              (json-request :post "/api/v1/posts"
+                                            {:content "second liked post"}
+                                            owner-token))
+        first-post-id (-> (parse-body first-post-response) :data :posts/id str)
+        second-post-id (-> (parse-body second-post-response) :data :posts/id str)]
+    (call-app (json-request :post (str "/api/v1/posts/" first-post-id "/like") nil viewer-token))
+    (call-app (json-request :post (str "/api/v1/posts/" second-post-id "/like") nil viewer-token))
+    (let [page1-response (call-app
+                          (json-request :get "/api/v1/users/likes-viewer/likes?limit=1&offset=0" nil viewer-token))
+          page2-response (call-app
+                          (json-request :get "/api/v1/users/likes-viewer/likes?limit=1&offset=1" nil viewer-token))
+          liked-posts (concat (-> page1-response parse-body :data)
+                              (-> page2-response parse-body :data))]
+      (testing "いいね一覧をページングして取得できる"
+        (is (= 200 (:status page1-response)))
+        (is (= 200 (:status page2-response)))
+        (is (= #{"first liked post" "second liked post"}
+               (set (map :posts/content liked-posts))))))))
 
 (deftest test-delete-post-forbidden
   (create-user! "owner")

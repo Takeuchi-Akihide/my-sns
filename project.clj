@@ -1,4 +1,4 @@
-(defproject my-sns "0.1.0-SNAPSHOT"
+(defproject my-sns "LATEST"
   :description "FIXME: write description"
   :url "http://example.com/FIXME"
   :license {:name "EPL-2.0 OR GPL-2.0-or-later WITH Classpath-exception-2.0"
@@ -24,4 +24,5 @@
                  [ring-cors "0.1.13"]]
   :main my-sns.core
   :profiles {:dev {:resource-paths ["dev-resources"]}
-             :test {:resource-paths ["test-resources"]}})
+             :test {:resource-paths ["test-resources"]}
+             :uberjar {:aot :all}})

@@ -29,7 +29,9 @@
 (defn with-mocked-redis [f]
   (let [timelines (atom {})
         likes (atom {})
-        dirty-posts (atom #{})]
+        dirty-posts (atom #{})
+        recently-posted (atom #{})
+        published-notifications (atom [])]
     (with-redefs [redis/push-to-timeline!
                   (fn [user-id post-id]
                     (swap! timelines update user-id (fnil #(vec (cons post-id %)) []))
@@ -58,6 +60,18 @@
                     (let [ids (vec @dirty-posts)]
                       (reset! dirty-posts #{})
                       ids))
+                  redis/mark-recently-posted!
+                  (fn [user-id]
+                    (swap! recently-posted conj user-id))
+                  redis/get-recently-posted
+                  (fn [user-id]
+                    (contains? @recently-posted user-id))
+                  redis/publish-notification!
+                  (fn [recipient-id actor-id post-id type]
+                    (swap! published-notifications conj {:recipient-id recipient-id
+                                                         :actor-id actor-id
+                                                         :post-id post-id
+                                                         :type type}))
                   async/put!
                   (fn
                     ([ch val]

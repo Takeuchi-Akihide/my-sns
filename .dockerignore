@@ -1,0 +1,13 @@
+.git
+.github
+.agent
+.lein-*
+.nrepl-port
+target
+classes
+checkouts
+frontend/node_modules
+frontend/dist
+doc
+*.jar
+*.class

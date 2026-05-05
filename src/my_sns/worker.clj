@@ -22,7 +22,7 @@
         (redis/publish-notification! owner-id actor-id post-id "REPLY")))
     :post-created
     (let [{:keys [post-id author-id]} event
-          follower-ids (map :users/id (schema/list-followers author-id))]
+          follower-ids (map :users/id (schema/list-all-followers author-id))]
       (doseq [f-id follower-ids]
         (redis/push-to-timeline! f-id post-id))
       (redis/push-to-timeline! author-id post-id))

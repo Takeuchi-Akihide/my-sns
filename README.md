@@ -276,33 +276,42 @@ curl -X POST http://localhost:3030/api/v1/follows/user2 \
 ### 10. フォロー一覧を取得
 
 ```bash
-curl "http://localhost:3030/api/v1/follows?username=user1" \
+curl "http://localhost:3030/api/v1/users/user1/follows?limit=20&offset=0" \
   -H "Authorization: Token $TOKEN"
 ```
 
-現在の実装では、この API は「指定ユーザーがフォローしているユーザー一覧」を返します。
+指定ユーザーがフォローしているユーザー一覧を返します。
 
-### 11. アンフォローする
+### 11. フォロワー一覧を取得
+
+```bash
+curl "http://localhost:3030/api/v1/users/user1/followers?limit=20&offset=0" \
+  -H "Authorization: Token $TOKEN"
+```
+
+指定ユーザーをフォローしているユーザー一覧を返します。
+
+### 12. アンフォローする
 
 ```bash
 curl -X DELETE http://localhost:3030/api/v1/follows/user2 \
   -H "Authorization: Token $TOKEN"
 ```
 
-### 12. タイムラインを取得
+### 13. タイムラインを取得
 
 ```bash
-curl "http://localhost:3030/api/v1/timeline?limit=20" \
+curl "http://localhost:3030/api/v1/timeline?limit=20&offset=0" \
   -H "Authorization: Token $TOKEN"
 ```
 
 タイムラインには自分とフォロー中ユーザーの親投稿が含まれ、`like_count`、`reply_count`、`is_liked` を返します。
 
-ページネーションには `cursor_date` と `cursor_id` を使います。
-次ページを取得するには、前回のレスポンスに含まれる `meta.next_cursor_date` と `meta.next_cursor_id` を指定します。
+ページネーションには `limit` と `offset` を使います。
+`limit` のデフォルトは20、最大値は100です。
 
 ```bash
-curl "http://localhost:3030/api/v1/timeline?limit=20&cursor_date=<NEXT_CURSOR_DATE>&cursor_id=<NEXT_CURSOR_ID>" \
+curl "http://localhost:3030/api/v1/timeline?limit=20&offset=20" \
   -H "Authorization: Token $TOKEN"
 ```
 
@@ -310,30 +319,34 @@ curl "http://localhost:3030/api/v1/timeline?limit=20&cursor_date=<NEXT_CURSOR_DA
 
 ```json
 {
-  "data": [ ... ],
-  "meta": {
-    "has_next": true,
-    "next_cursor_date": "2026-04-24T12:00:00.000Z",
-    "next_cursor_id": "..."
-  }
+  "data": [ ... ]
 }
 ```
 
-### 13. 投稿にいいねする
+### 14. 投稿にいいねする
 
 ```bash
 curl -X POST http://localhost:3030/api/v1/posts/<POST_ID>/like \
   -H "Authorization: Token $TOKEN"
 ```
 
-### 14. 投稿のいいねを解除する
+### 15. 投稿のいいねを解除する
 
 ```bash
 curl -X DELETE http://localhost:3030/api/v1/posts/<POST_ID>/like \
   -H "Authorization: Token $TOKEN"
 ```
 
-### 15. ユーザーを削除
+### 16. いいね一覧を取得
+
+```bash
+curl "http://localhost:3030/api/v1/users/user1/likes?limit=20&offset=0" \
+  -H "Authorization: Token $TOKEN"
+```
+
+指定ユーザーがいいねした投稿一覧を返します。
+
+### 17. ユーザーを削除
 
 ```bash
 curl -X DELETE http://localhost:3030/api/v1/users \
