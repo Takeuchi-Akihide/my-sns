@@ -17,6 +17,7 @@
             [my-sns.worker :as worker]))
 
 (def LIMIT 20)
+(def MAX_LIMIT 100)
 
 (defn parse-uuid-param [value]
   (or (parse-uuid value)
@@ -84,6 +85,22 @@
     (when (str/blank? param)
       (throw (ex-info (str "Missing required parameter: " key) {:type :bad-request})))))
 
+(defn parse-long-query-param
+  [params key default-value {:keys [min max]}]
+  (let [raw (get params key (str default-value))]
+    (try
+      (let [value (Long/parseLong raw)]
+        (when (and min (< value min))
+          (throw (ex-info (str (name key) " must be greater than or equal to " min)
+                          {:type :bad-request})))
+        (when (and max (> value max))
+          (throw (ex-info (str (name key) " must be less than or equal to " max)
+                          {:type :bad-request})))
+        value)
+      (catch NumberFormatException _
+        (throw (ex-info (str (name key) " must be an integer")
+                        {:type :bad-request}))))))
+
 (defn post-posts-handler [req]
   (let [my-uuid (-> req :identity :user_id)
         body (:body req)
@@ -129,9 +146,9 @@
 (defn list-posts-handler [req]
   (let [my-uuid (-> req :identity :user_id)
         target-user (-> req :params :username)
-        limit (Long/parseLong (or (-> req :params :limit) (str LIMIT)))]
-    (check-required-params my-uuid {})
-
+        _ (check-required-params my-uuid {"username" target-user})
+        limit (parse-long-query-param (:params req) :limit LIMIT {:min 1 :max MAX_LIMIT})]
+   
     (if (schema/get-user-by-id my-uuid)
       (if-let [user (schema/get-user-by-username target-user)]
         (let [user-id (:users/id user)
@@ -143,15 +160,36 @@
 
 (defn list-follows-handler [req]
   (let [my-uuid (-> req :identity :user_id)
-        target-user (-> req :params :username)]
-    (check-required-params my-uuid {})
+        target-user (-> req :path-params :username)
+        _ (check-required-params my-uuid {"username" target-user})
+        params (:params req)
+        limit (parse-long-query-param params :limit LIMIT {:min 1 :max MAX_LIMIT})
+        offset (parse-long-query-param params :offset 0 {:min 0})]
 
     (if (schema/get-user-by-id my-uuid)
       (if-let [user (schema/get-user-by-username target-user)]
         (let [user-id (:users/id user)
-              follows (schema/list-follows user-id)]
+              follows (schema/list-follows user-id limit offset)]
           {:status 200
-           :body {:message "Followers retrieved successfully" :data follows}})
+           :body {:message "Get follows successfully" :data follows}})
+        (throw (ex-info (str "Target user not found: " target-user) {:type :not-found})))
+      (throw (ex-info "User account no longer exists. Please log in again." {:type :unauthorized})))))
+
+(defn list-followers-handler [req]
+  (let [my-uuid (-> req :identity :user_id)
+        target-user (-> req :path-params :username)
+        _ (check-required-params my-uuid {"username" target-user})
+        params (:params req)
+        limit (parse-long-query-param params :limit LIMIT {:min 1 :max MAX_LIMIT})
+        offset (parse-long-query-param params :offset 0 {:min 0})]
+    (check-required-params my-uuid {"username" target-user})
+
+    (if (schema/get-user-by-id my-uuid)
+      (if-let [user (schema/get-user-by-username target-user)]
+        (let [user-id (:users/id user)
+              followers (schema/list-followers user-id limit offset)]
+          {:status 200
+           :body {:message "Get followers successfully" :data followers}})
         (throw (ex-info (str "Target user not found: " target-user) {:type :not-found})))
       (throw (ex-info "User account no longer exists. Please log in again." {:type :unauthorized})))))
 
@@ -188,11 +226,11 @@
 (defn list-timeline-handler [req]
   (let [my-uuid (-> req :identity :user_id)
         params (:params req)
-        limit  (Long/parseLong (get params :limit (str LIMIT)))
-        offset (Long/parseLong (get params :offset "0"))
+        _ (check-required-params my-uuid {})
+        limit (parse-long-query-param params :limit LIMIT {:min 1 :max MAX_LIMIT})
+        offset (parse-long-query-param params :offset 0 {:min 0})
         start offset
         end (+ offset limit -1)]
-    (check-required-params my-uuid {})
 
     (if (schema/get-user-by-id my-uuid)
       (let [post-ids (redis/get-timeline-ids my-uuid start end)]
@@ -309,11 +347,27 @@
           (throw (ex-info "Invalid Post ID format. Must be UUID." {:type :bad-request}))))
       (throw (ex-info "User account no longer exists. Please log in again." {:type :unauthorized})))))
 
+(defn list-likes-handler [req]
+  (let [my-uuid (-> req :identity :user_id)
+        target-user (-> req :path-params :username)
+        _ (check-required-params my-uuid {"username" target-user})
+        params (:params req)
+        limit (parse-long-query-param params :limit LIMIT {:min 1 :max MAX_LIMIT})
+        offset (parse-long-query-param params :offset 0 {:min 0})]
+
+    (if (schema/get-user-by-id my-uuid)
+      (if-let [user (schema/get-user-by-username target-user)]
+        (let [likes (schema/get-user-likes (:users/id user) limit offset)]
+          {:status 200
+           :body {:message "Get user likes successfully" :data likes}})
+        (throw (ex-info (str "Target user not found: " target-user) {:type :not-found})))
+      (throw (ex-info "User account no longer exists. Please log in again." {:type :unauthorized})))))
+
 (defn list-posts-replies-handler [req]
   (let [my-uuid (-> req :identity :user_id)
         post-id (-> req :path-params :post_id)
-        limit (Long/parseLong (or (-> req :params :limit) (str LIMIT)))]
-    (check-required-params my-uuid {"post_id" post-id})
+        _ (check-required-params my-uuid {"post_id" post-id})
+        limit (parse-long-query-param (:params req) :limit LIMIT {:min 1 :max MAX_LIMIT})]
 
     (if (schema/get-user-by-id my-uuid)
       (try
@@ -343,7 +397,13 @@
                :put put-user-handler
                :delete delete-user-handler}]
           ;; GET: /api/v1/users/user1
-          ["/:username" {:get get-user-handler}]]
+          ["/:username" {:get get-user-handler}]
+          ;; GET: /api/v1/users/user1/follows
+          ["/:username/follows" {:get list-follows-handler}]
+          ;; GET: /api/v1/users/user1/followers
+          ["/:username/followers" {:get list-followers-handler}]
+          ;; GET: /api/v1/users/user1/likes
+          ["/:username/likes" {:get list-likes-handler}]]
          ["/posts"
           ;; GET:  /api/v1/posts?username=user1
           ;; POST: /api/v1/posts
@@ -355,8 +415,6 @@
           ["/:post_id/like" {:post post-like-handler
                              :delete post-unlike-handler}]]
          ["/follows"
-          ;; GET: /api/v1/follows?username=user1
-          ["" {:get list-follows-handler}]
           ;; POST/DELETE: /api/v1/follows/user1
           ["/:target_username" {:post post-follow-handler
                                 :delete delete-follow-handler}]]

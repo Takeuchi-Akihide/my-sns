@@ -39,8 +39,8 @@
       PRIMARY KEY (follower_id, followed_id)
     );"
 
-   "CREATE INDEX IF NOT EXISTS idx_follows_followed_id ON follows(followed_id);"
-   "CREATE INDEX IF NOT EXISTS idx_follows_follower_id ON follows(follower_id);"
+   "CREATE INDEX IF NOT EXISTS idx_follows_followed_created ON follows(followed_id, created_at DESC);"
+   "CREATE INDEX IF NOT EXISTS idx_follows_follower_created ON follows(follower_id, created_at DESC);"
 
    "CREATE TABLE IF NOT EXISTS post_likes (
       user_id UUID REFERENCES users(id) ON DELETE CASCADE,
@@ -51,6 +51,7 @@
 
    "CREATE UNIQUE INDEX IF NOT EXISTS idx_post_likes ON post_likes(post_id, user_id);"
    "CREATE INDEX IF NOT EXISTS idx_posts_timeline ON posts (parent_id, created_at DESC, id DESC);"
+   "CREATE INDEX IF NOT EXISTS idx_post_likes_created ON post_likes(user_id, created_at DESC);"
 
    "CREATE TABLE IF NOT EXISTS notifications (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -180,15 +181,28 @@
                   user-id limit]))
 
 (defn list-follows
-  [user-id]
+  [user-id limit offset]
   (jdbc/execute! *current-db*
                  ["SELECT u.id, u.username
                    FROM follows f
                    JOIN users u ON f.followed_id = u.id
-                   WHERE f.follower_id = ?"
-                  user-id]))
+                   WHERE f.follower_id = ?
+                   ORDER BY f.created_at DESC
+                   LIMIT ? OFFSET ?"
+                  user-id limit offset]))
 
 (defn list-followers
+  [user-id limit offset]
+  (jdbc/execute! *current-db*
+                 ["SELECT u.id, u.username
+                   FROM follows f
+                   JOIN users u ON f.follower_id = u.id
+                   WHERE f.followed_id = ?
+                   ORDER BY f.created_at DESC
+                   LIMIT ? OFFSET ?"
+                  user-id limit offset]))
+
+(defn list-all-followers
   [user-id]
   (jdbc/execute! *current-db*
                  ["SELECT u.id, u.username
@@ -221,6 +235,20 @@
             (redis/mark-dirty! post-id)
             {:status 200 :message "Unliked successfully"})
         {:status 200 :message "Not liked"}))))
+
+(defn get-user-likes
+  [user-id limit offset]
+  (jdbc/execute! *current-db*
+                 ["SELECT p.id, p.content, p.created_at AS post_created_at,
+                          u.id AS author_id, u.username AS author_name,
+                          l.created_at AS liked_at
+                   FROM posts p
+                   INNER JOIN post_likes l ON p.id = l.post_id
+                   INNER JOIN users u ON p.user_id = u.id
+                   WHERE l.user_id = ?
+                   ORDER BY l.created_at DESC
+                   LIMIT ? OFFSET ?"
+                  user-id limit offset]))
 
 (defn sync-like-count!
   [post-id current-count]
