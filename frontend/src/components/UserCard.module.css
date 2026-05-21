@@ -1,0 +1,66 @@
+.card {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px;
+  background-color: var(--color-bg);
+  border-bottom: 1px solid var(--color-border);
+}
+
+.info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+}
+
+.username {
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--color-text);
+}
+
+.username:hover {
+  text-decoration: underline;
+}
+
+.displayName {
+  font-size: 14px;
+  color: var(--color-text-muted);
+}
+
+.bio {
+  font-size: 14px;
+  color: var(--color-text);
+  word-break: break-word;
+  margin-top: 2px;
+}
+
+.followBtn {
+  flex-shrink: 0;
+  padding: 7px 16px;
+  border-radius: var(--radius-full);
+  font-size: 14px;
+  font-weight: 700;
+  background-color: var(--color-text);
+  color: #fff;
+  transition: opacity 0.15s;
+}
+
+.followBtn:hover {
+  opacity: 0.8;
+}
+
+.following {
+  background-color: var(--color-bg);
+  color: var(--color-text);
+  border: 1px solid var(--color-border);
+}
+
+.following:hover {
+  background-color: rgba(244, 33, 46, 0.1);
+  color: var(--color-danger);
+  border-color: var(--color-danger);
+}

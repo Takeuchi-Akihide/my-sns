@@ -1,0 +1,99 @@
+.page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 20px;
+}
+
+.card {
+  width: 100%;
+  max-width: 400px;
+  background-color: var(--color-bg);
+  padding: 32px;
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.logo {
+  font-size: 28px;
+  color: var(--color-primary);
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.title {
+  font-size: 20px;
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field label {
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.field input {
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  transition: border-color 0.15s;
+}
+
+.field input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+.error {
+  color: var(--color-danger);
+  font-size: 13px;
+  text-align: center;
+}
+
+.submitBtn {
+  margin-top: 8px;
+  padding: 12px;
+  border-radius: var(--radius-full);
+  background-color: var(--color-primary);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  transition: opacity 0.15s;
+}
+
+.submitBtn:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+.submitBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.link {
+  margin-top: 24px;
+  text-align: center;
+  font-size: 14px;
+  color: var(--color-text-muted);
+}
+
+.link a {
+  color: var(--color-primary);
+}
+
+.link a:hover {
+  text-decoration: underline;
+}
