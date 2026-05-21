@@ -1,0 +1,79 @@
+.card {
+  padding: 16px;
+  background-color: var(--color-bg);
+  border-bottom: 1px solid var(--color-border);
+  transition: background-color 0.15s;
+}
+
+.clickable {
+  cursor: pointer;
+}
+
+.clickable:hover {
+  background-color: var(--color-bg-secondary);
+}
+
+.meta {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.username {
+  font-weight: 700;
+  color: var(--color-text);
+  font-size: 14px;
+}
+
+.username:hover {
+  text-decoration: underline;
+}
+
+.displayName {
+  font-size: 14px;
+  color: var(--color-text-muted);
+}
+
+.time {
+  font-size: 13px;
+  color: var(--color-text-muted);
+  margin-left: auto;
+}
+
+.content {
+  font-size: 15px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin-bottom: 12px;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.actionBtn {
+  font-size: 14px;
+  color: var(--color-text-muted);
+  padding: 4px 8px;
+  border-radius: var(--radius-full);
+  transition: color 0.15s, background-color 0.15s;
+}
+
+.actionBtn:hover {
+  background-color: rgba(249, 24, 128, 0.1);
+  color: var(--color-like);
+}
+
+.liked {
+  color: var(--color-like);
+}
+
+.deleteBtn:hover {
+  background-color: rgba(244, 33, 46, 0.1);
+  color: var(--color-danger);
+}

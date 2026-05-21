@@ -1,0 +1,44 @@
+.item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+  border-bottom: 1px solid var(--color-border);
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+
+.item:hover {
+  background-color: var(--color-bg-secondary);
+}
+
+.unread {
+  background-color: rgba(29, 155, 240, 0.05);
+}
+
+.read {
+  background-color: var(--color-bg);
+}
+
+.icon {
+  font-size: 20px;
+  flex-shrink: 0;
+  color: var(--color-like);
+}
+
+.body {
+  flex: 1;
+}
+
+.text {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--color-text);
+}
+
+.time {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  margin-top: 4px;
+  display: block;
+}
